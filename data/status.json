@@ -1,0 +1,19 @@
+{
+  "overall": "online",
+  "title": "Alle Systeme operational",
+  "message": "Blue ⚡ ist verbunden und läuft stabil.",
+  "components": [
+    { "name": "Discord Gateway", "status": "online", "description": "Bot Verbindung" },
+    { "name": "Slash Commands", "status": "online", "description": "Command Handling" },
+    { "name": "Ticket System", "status": "online", "description": "Support Module" },
+    { "name": "Website", "status": "online", "description": "Frontend & API" },
+    { "name": "Database", "status": "online", "description": "Speicher & Konfiguration" }
+  ],
+  "incidents": [
+    {
+      "title": "Keine aktiven Incidents",
+      "date": "2026-06-10",
+      "text": "Alle Systeme laufen normal."
+    }
+  ]
+}
