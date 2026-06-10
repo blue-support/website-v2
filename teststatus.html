@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#2563ff" />
+  <meta name="description" content="Live Status von Blue ⚡ Discord Bot." />
+  <title>Bot Status — Blue ⚡</title>
+  <link rel="icon" href="assets/testfavicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="assets/teststyles.css" />
+</head>
+<body>
+  <canvas id="fx-canvas" aria-hidden="true"></canvas>
+  <div class="page-glow page-glow-one"></div>
+  <div class="page-glow page-glow-two"></div>
+
+  <header class="site-header" data-header>
+    <a class="brand" href="testindex.html"><span class="brand-mark">⚡</span><span class="brand-text">Blue</span></a>
+    <button class="nav-toggle" type="button" aria-label="Menü öffnen" data-nav-toggle><span></span><span></span><span></span></button>
+    <nav class="nav" data-nav>
+      <a href="testindex.html">Home</a>
+      <a href="testindex.html#features">Features</a>
+      <a href="teststatus.html" class="active">Bot Status</a>
+      <a href="testtos.html">TOS</a>
+      <a href="testprivacy.html">Privacy</a>
+      <a href="testimpressum.html">Impressum</a>
+      <a class="nav-pill" href="https://dsc.blue-lol.de" target="_blank" rel="noopener">Support</a>
+    </nav>
+  </header>
+
+  <main class="page-main section-pad">
+    <section class="page-hero reveal">
+      <p class="eyebrow"><span class="pulse-dot"></span> Live System Monitor</p>
+      <h1>Bot Status</h1>
+      <p>Hier siehst du, ob Blue ⚡ gerade online ist, wie der Ping aussieht und ob einzelne Services Probleme haben.</p>
+    </section>
+
+    <section class="status-overview reveal delay-1">
+      <article class="status-big-card">
+        <div>
+          <span class="status-badge online" data-status-badge>Online</span>
+          <h2 data-status-title>Alle Systeme operational</h2>
+          <p data-status-message>Blue ⚡ läuft stabil. Keine aktiven Störungen.</p>
+        </div>
+        <div class="status-orb" data-status-orb></div>
+      </article>
+      <div class="stat-grid status-stats">
+        <article><span data-stat="onlineUsers">—</span><small>User online</small></article>
+        <article><span data-stat="guilds">—</span><small>Server</small></article>
+        <article><span data-stat="latency">—</span><small>Gateway Ping</small></article>
+        <article><span data-stat="uptime">—</span><small>Uptime</small></article>
+      </div>
+    </section>
+
+    <section class="section-pad slim">
+      <div class="section-heading reveal">
+        <p class="eyebrow">Components</p>
+        <h2>Service Health</h2>
+      </div>
+      <div class="component-list reveal" data-components>
+        <article class="component-row skeleton"><span>Gateway</span><strong>Lädt…</strong></article>
+        <article class="component-row skeleton"><span>Commands</span><strong>Lädt…</strong></article>
+        <article class="component-row skeleton"><span>Website</span><strong>Lädt…</strong></article>
+      </div>
+    </section>
+
+    <section class="section-pad slim">
+      <div class="section-heading reveal">
+        <p class="eyebrow">Updates</p>
+        <h2>Letzte Incidents</h2>
+      </div>
+      <div class="incident-list reveal" data-incidents>
+        <article class="incident-card"><strong>Keine Incidents geladen</strong><p>Die Statusdaten werden aus <code>data/teststatus.json</code> geladen.</p></article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-bottom">© 2026 Alle Rechte vorbehalten</div>
+  </footer>
+
+  <script src="assets/testapp.js"></script>
+</body>
+</html>

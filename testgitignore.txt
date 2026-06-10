@@ -1,0 +1,5 @@
+# Wenn du möchtest, benenne diese Datei zu .gitignore um.
+node_modules/
+.env
+*.log
+.DS_Store
