@@ -1,7 +1,7 @@
 {
-  "overall": "online",
-  "title": "Alle Systeme operational",
-  "message": "Blue ⚡ ist verbunden und läuft stabil.",
+  "overall": "offline",
+  "title": "Status wird geprüft",
+  "message": "Live-Status konnte gerade nicht geladen werden.",
   "components": [
     { "name": "Discord Gateway", "status": "online", "description": "Bot Verbindung" },
     { "name": "Slash Commands", "status": "online", "description": "Command Handling" },
