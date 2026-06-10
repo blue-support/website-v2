@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#3b82f6" />
+  <meta name="description" content="Blue ⚡ ist der All-in-One Discord Bot für Community Server: Globalchat, Moderation, Tickets, Verify, Musik, Spiele, Anonymchat und Blue Security." />
+  <meta property="og:title" content="Blue ⚡ Discord Bot" />
+  <meta property="og:description" content="Ein Bot. Kein Chaos. Globalchat, Moderation, Tickets, Verify, Musik, Spiele und Sicherheit für deinen Discord Server." />
+  <meta property="og:type" content="website" />
+  <title>Blue ⚡ — All-in-One Discord Bot</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+  <style>body{margin:0;background:#030712;color:#f7fbff;font-family:Inter,system-ui,sans-serif}a{color:inherit}</style>
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <canvas id="fx-canvas" aria-hidden="true"></canvas>
+  <div class="aurora"></div><div class="noise"></div><div class="orb one"></div><div class="orb two"></div>
+
+  <header class="site-header" data-header>
+    <a class="brand" href="index.html" aria-label="Blue Startseite"><span class="brand-mark">⚡</span><span class="brand-text">Blue</span></a>
+    <button class="nav-toggle" type="button" aria-label="Menü öffnen" aria-expanded="false" data-nav-toggle><span></span><span></span><span></span></button>
+    <nav class="nav" data-nav>
+      <a class="active" href="index.html">Home</a>
+      <a href="#features">Features</a>
+      <a href="#commands">Commands</a>
+      <a href="status.html">Bot Status</a>
+      <a href="tos.html">TOS</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="impressum.html">Impressum</a>
+      <a class="nav-cta" href="https://dsc.blue-lol.de" target="_blank" rel="noopener">Support</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="wrapper hero-grid">
+        <div class="hero-copy reveal">
+          <p class="eyebrow"><span class="pulse-dot"></span> Blue ⚡ Version 3.2.1</p>
+          <h1>Ein Bot. <span class="text-gradient">Kein Chaos.</span> Alles drin.</h1>
+          <p class="hero-text">Kein Bock auf 20 verschiedene Bots, die nur Chaos bringen? <strong>Blue ⚡</strong> verbindet Globalchat, Moderation, Tickets, Verifizierung, Musik, Spiele, Anonymchat und Security in einem einzigen cleanen System.</p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="https://discord.com/oauth2/authorize?client_id=1321889022380871681&permissions=8&scope=bot%20applications.commands" target="_blank" rel="noopener">Bot einladen</a>
+            <a class="btn btn-secondary" href="https://dsc.blue-lol.de" target="_blank" rel="noopener">Support Server</a>
+            <a class="btn btn-ghost" href="status.html">Live Status</a>
+          </div>
+          <div class="trust-row" aria-label="Highlights">
+            <span>🌍 Globalchat</span><span>🛡️ Moderation</span><span>🎫 Tickets</span><span>✅ Verify</span>
+          </div>
+          <div class="bot-proof">
+            <span>40 registrierte Slash-Commands</span>
+            <span>28 User/Admin Commands</span>
+            <span>Premium-Systeme integriert</span>
+          </div>
+        </div>
+
+        <div class="hero-panel reveal delay-1">
+          <aside class="dashboard-card" data-tilt aria-label="Bot Vorschau">
+            <div class="browser-dots"><span></span><span></span><span></span></div>
+            <div class="bot-top">
+              <div class="bot-avatar">B⚡</div>
+              <div>
+                <h2>Blue ⚡</h2>
+                <p data-status-title>Alle Systeme operational</p>
+              </div>
+              <span class="status-badge online" data-status-badge>Online</span>
+            </div>
+            <div class="stat-grid">
+              <div class="stat-box"><strong data-stat="onlineUsers">—</strong><span>User online</span></div>
+              <div class="stat-box"><strong data-stat="guilds">—</strong><span>Server</span></div>
+              <div class="stat-box"><strong data-stat="latency">—</strong><span>Ping</span></div>
+            </div>
+            <div class="terminal">
+              <div><span class="cmd">/setup-ticket-system</span> Panel + Kategorien</div>
+              <div><span class="ok">✓</span> /setup-globalchat aktiv</div>
+              <div><span class="ok">✓</span> /setup-verify bereit</div>
+              <div><span class="warn">⚡</span> Blue Security watchlist online</div>
+            </div>
+          </aside>
+          <div class="mini-card"><span>Globalchat aktiv</span><p>Serverübergreifender Chat mit Rang-Anzeige und Reply-DMs.</p></div>
+          <div class="command-preview"><strong>/help</strong><p>Alle öffentlichen Commands direkt im Server.</p></div>
+        </div>
+      </div>
+
+      <div class="wrapper stats-strip reveal delay-2" aria-label="Live Statistiken">
+        <div class="stat-pill"><strong data-stat="onlineUsers">—</strong><span>User online</span></div>
+        <div class="stat-pill"><strong data-stat="guilds">—</strong><span>Server verbunden</span></div>
+        <div class="stat-pill"><strong>30+</strong><span>Slash Commands</span></div>
+        <div class="stat-pill"><strong data-stat="uptime">—</strong><span>Uptime</span></div>
+      </div>
+    </section>
+
+    <section id="features" class="section">
+      <div class="wrapper">
+        <div class="section-heading reveal">
+          <p class="eyebrow"><span class="dot"></span> Echte Bot-Features</p>
+          <h2>Gebaut nach deinem Bot-Code, nicht ausgedacht.</h2>
+          <p>Die Website zeigt jetzt die Systeme, die Blue wirklich kann: Globalchat, Moderation, Tickets, Verify, Musik, Spiele, Anonymchat, Teamlisten und Security.</p>
+        </div>
+        <div class="feature-grid">
+          <article class="feature-card premium-feature reveal"><div class="feature-icon">🌍</div><h3>Globalchat System</h3><p>Serverübergreifende Nachrichten mit Rang-Anzeige, Server-Infos, Reply-Support, DM-Benachrichtigungen und Globalchat-Bans.</p></article>
+          <article class="feature-card reveal delay-1"><div class="feature-icon">🛡️</div><h3>Moderation</h3><p>Ban, Unban, Kick, Mute und Unmute mit Gründen, optionaler Dauer und automatischer Entstrafung nach Ablauf.</p></article>
+          <article class="feature-card reveal delay-2"><div class="feature-icon">🎫</div><h3>Ticket System</h3><p>Professionelle Ticket-Panels mit Kategorien, Support-Rollen, Claim/Unclaim, Close-Grund und Log-System.</p></article>
+          <article class="feature-card reveal"><div class="feature-icon">✅</div><h3>Verify</h3><p>Button-Verifizierung mit Code-Eingabe. Nutzer klicken, bestätigen den Code und erhalten automatisch ihre Rolle.</p></article>
+          <article class="feature-card reveal delay-1"><div class="feature-icon">🎵</div><h3>Musik Autojoin</h3><p>Blue kann Voice-Channels joinen, lokale Songs abspielen, aktuelle/vorherige Songs anzeigen und Songs listen.</p></article>
+          <article class="feature-card reveal delay-2"><div class="feature-icon">🕵️</div><h3>Anonymchat</h3><p>Premium-System für anonyme Nachrichten per Webhook mit separatem Log-Channel für sichere Nachvollziehbarkeit.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="wrapper">
+        <div class="section-heading reveal">
+          <p class="eyebrow"><span class="dot"></span> Module</p>
+          <h2>Ein Bot ersetzt mehrere einzelne Systeme.</h2>
+        </div>
+        <div class="module-grid">
+          <article class="module-card reveal"><strong>🎮</strong><h3>Games</h3><p>TicTacToe, Counting und Errate-die-Zahl sorgen für Aktivität im Chat.</p></article>
+          <article class="module-card reveal delay-1"><strong>💋</strong><h3>Fun</h3><p>Kleine Community-Interaktionen wie /kiss mit Cooldown gegen Spam.</p></article>
+          <article class="module-card reveal delay-2"><strong>👥</strong><h3>Teamlisten</h3><p>Automatische Teamliste für Rollen und Server-Team-Übersicht.</p></article>
+          <article class="module-card reveal delay-3"><strong>🔐</strong><h3>Blue Security</h3><p>Global-Ban-Reports, Review-Buttons und Security-Tools für problematische User.</p></article>
+          <article class="module-card reveal"><strong>⚙️</strong><h3>Systemstatus</h3><p>/systeme-view zeigt, welche Systeme eingerichtet oder global gesperrt sind.</p></article>
+          <article class="module-card reveal delay-1"><strong>🚀</strong><h3>Admin Onboarding</h3><p>Blue erstellt Setup-Hinweise für Admins, damit neue Server schnell starten.</p></article>
+          <article class="module-card reveal delay-2"><strong>⭐</strong><h3>Premium</h3><p>Premium-Systeme sind sauber geprüft und an Server-Owner gebunden.</p></article>
+          <article class="module-card reveal delay-3"><strong>📊</strong><h3>Live Stats</h3><p>Bot-Status zeigt Server, User, Ping, Uptime und Systemkomponenten über Render.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="commands" class="section">
+      <div class="wrapper system-board">
+        <div class="system-panel reveal">
+          <p class="eyebrow"><span class="dot"></span> Commands</p>
+          <h3>Die wichtigsten Slash-Commands</h3>
+          <p>Blue nutzt Slash-Commands für Setup, Moderation, Support und Community-Features. Owner-only Commands bleiben bewusst nicht im Mittelpunkt, damit die Website sauber und öffentlich wirkt.</p>
+          <div class="command-cloud" aria-label="Command Übersicht">
+            <span class="command-chip hot">/setup-globalchat</span>
+            <span class="command-chip hot">/setup-ticket-system</span>
+            <span class="command-chip hot">/setup-verify</span>
+            <span class="command-chip">/setup-mod-team</span>
+            <span class="command-chip">/ban</span>
+            <span class="command-chip">/mute</span>
+            <span class="command-chip">/kick</span>
+            <span class="command-chip">/systeme-view</span>
+            <span class="command-chip">/setup-anonymchat</span>
+            <span class="command-chip">/send-anonym-message</span>
+            <span class="command-chip">/setup-counting</span>
+            <span class="command-chip">/setup-errate-zahl</span>
+            <span class="command-chip">/tictactoe</span>
+            <span class="command-chip">/join</span>
+            <span class="command-chip">/list-songs</span>
+            <span class="command-chip">/report-user</span>
+            <span class="command-chip">/setup-teamlist</span>
+            <span class="command-chip">/help</span>
+          </div>
+        </div>
+        <div class="blue-console reveal delay-1">
+          <div class="console-top"><span></span><span></span><span></span></div>
+          <div class="console-line"><code>/setup-globalchat</code><small>Serverübergreifender Chat</small></div>
+          <div class="console-line"><code>/setup-ticket-system</code><small>Support Panel erstellen</small></div>
+          <div class="console-line"><code>/setup-verify</code><small>Verify Button + Rolle</small></div>
+          <div class="console-line"><code>/setup-mod-team</code><small>Mod-Rollen festlegen</small></div>
+          <div class="console-line"><code>/report-user</code><small>Blue Security Report</small></div>
+          <div class="console-line"><code>/systeme-view</code><small>Setup-Status checken</small></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="wrapper showcase reveal">
+        <div>
+          <p class="eyebrow"><span class="dot"></span> Setup in Minuten</p>
+          <h2>Von leerem Server zu sauberem System.</h2>
+          <p class="hero-text">Blue bringt einen eigenen Admin-Setup-Flow mit. Neue Server bekommen Hinweise zu wichtigen Systemen wie Verify, Tickets, Globalchat, Counting und Musik.</p>
+          <ul class="check-list">
+            <li>Mod-Team-Rollen festlegen und Moderation sauber absichern.</li>
+            <li>Tickets mit Kategorien, Rollen, Claims und Logs einrichten.</li>
+            <li>Globalchat verbinden und Community serverübergreifend aktivieren.</li>
+            <li>Verify, Anonymchat, Teamliste und Games nach Bedarf aktivieren.</li>
+          </ul>
+        </div>
+        <div class="command-stack">
+          <div class="command-card"><span>/setup-mod-team</span><small>Wer darf moderieren?</small></div>
+          <div class="command-card"><span>/setup-ticket-system</span><small>Support Workflow starten</small></div>
+          <div class="command-card"><span>/setup-globalchat</span><small>Server verbinden</small></div>
+          <div class="command-card"><span>/setup-verify</span><small>Rollen-Verifizierung</small></div>
+          <div class="command-card"><span>/systeme-view</span><small>Alles prüfen</small></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="wrapper">
+        <div class="section-heading reveal">
+          <p class="eyebrow"><span class="dot"></span> Security</p>
+          <h2>Mehr Kontrolle für große Communities.</h2>
+        </div>
+        <div class="security-strip">
+          <article class="security-card reveal"><strong>🛡️ Temporäre Strafen</strong><p>Bans und Mutes können mit Dauer gesetzt werden und laufen automatisch aus.</p></article>
+          <article class="security-card reveal delay-1"><strong>🌍 Globalchat Schutz</strong><p>Globalchat-Bans, Cooldowns und automatische Löschung halten den Chat sauber.</p></article>
+          <article class="security-card reveal delay-2"><strong>🔐 Blue Security</strong><p>User-Reports können an das Security-Team gesendet und dort geprüft werden.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="wrapper cta reveal">
+        <div>
+          <p class="eyebrow"><span class="dot"></span> Ready?</p>
+          <h2>Gib deinem Server den Bot, der wirklich Ordnung macht.</h2>
+          <p>Globalchat, Tickets, Moderation, Verify, Musik und Security — alles in Blue ⚡.</p>
+        </div>
+        <div class="cta-actions">
+          <a class="btn btn-primary" href="https://discord.com/oauth2/authorize?client_id=1321889022380871681&permissions=8&scope=bot%20applications.commands" target="_blank" rel="noopener">Blue einladen</a>
+          <a class="btn btn-secondary" href="https://dsc.blue-lol.de" target="_blank" rel="noopener">Support joinen</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrapper footer-grid">
+      <div><a class="brand" href="index.html"><span class="brand-mark">⚡</span><span class="brand-text">Blue</span></a><p>Der All-in-One Discord Bot für Community Server, die professionell wachsen wollen.</p></div>
+      <div class="footer-links"><strong>Website</strong><a href="index.html">Home</a><a href="status.html">Bot Status</a><a href="support.html">Support</a></div>
+      <div class="footer-links"><strong>Legal</strong><a href="impressum.html">Impressum</a><a href="tos.html">Terms of Service</a><a href="privacy.html">Privacy</a></div>
+      <div class="footer-links"><strong>Action</strong><a href="https://discord.com/oauth2/authorize?client_id=1321889022380871681&permissions=8&scope=bot%20applications.commands" target="_blank" rel="noopener">Bot einladen</a><a href="https://dsc.blue-lol.de" target="_blank" rel="noopener">Discord öffnen</a></div>
+    </div>
+    <div class="wrapper copyright"><span>© 2026 Alle Rechte vorbehalten</span><span>Blue ⚡ Community Bot</span></div>
+  </footer>
+
+  <script src="assets/app.js"></script>
+</body>
+</html>
