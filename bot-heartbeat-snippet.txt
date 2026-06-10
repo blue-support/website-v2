@@ -1,0 +1,72 @@
+# 1) Bei den Intents ergänzen:
+intents.presences = True  # Für echte Online-User-Stats
+
+# 2) Nach start_time = time.time() / server_settings = {} einfügen:
+BLUE_WEBSITE_HEARTBEAT_URL = os.getenv("BLUE_WEBSITE_HEARTBEAT_URL", "").strip()
+BOT_HEARTBEAT_SECRET = os.getenv("BOT_HEARTBEAT_SECRET", "").strip()
+BOT_VERSION = os.getenv("BOT_VERSION", "3.2.1")
+
+
+def format_blue_uptime() -> str:
+    diff = int(time.time() - start_time)
+    days, rest = divmod(diff, 86400)
+    hours, rest = divmod(rest, 3600)
+    minutes, _ = divmod(rest, 60)
+    if days:
+        return f"{days}d {hours}h"
+    if hours:
+        return f"{hours}h {minutes}m"
+    return f"{minutes}m"
+
+
+def count_blue_online_users() -> int:
+    users = set()
+    for guild in bot.guilds:
+        for member in getattr(guild, "members", []):
+            try:
+                if not member.bot and member.status != discord.Status.offline:
+                    users.add(member.id)
+            except Exception:
+                continue
+    return len(users)
+
+
+async def send_blue_website_heartbeat_once():
+    if not BLUE_WEBSITE_HEARTBEAT_URL or not BOT_HEARTBEAT_SECRET:
+        return
+
+    payload = {
+        "botReady": bot.is_ready(),
+        "guilds": len(bot.guilds),
+        "totalUsers": sum((guild.member_count or 0) for guild in bot.guilds),
+        "onlineUsers": count_blue_online_users(),
+        "commandsToday": 0,
+        "latency": None if bot.latency == float("inf") else round(bot.latency * 1000),
+        "uptime": format_blue_uptime(),
+        "version": BOT_VERSION,
+        "source": "Blue Python Bot"
+    }
+
+    headers = {
+        "Content-Type": "application/json",
+        "X-Blue-Heartbeat-Secret": BOT_HEARTBEAT_SECRET
+    }
+
+    try:
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(BLUE_WEBSITE_HEARTBEAT_URL, json=payload, headers=headers) as response:
+                if response.status >= 300:
+                    text = await response.text()
+                    print(f"[Website Heartbeat] Fehler {response.status}: {text[:180]}")
+    except Exception as error:
+        print(f"[Website Heartbeat] Konnte nicht gesendet werden: {error}")
+
+
+@tasks.loop(seconds=30)
+async def website_heartbeat():
+    await send_blue_website_heartbeat_once()
+
+# 3) In on_ready() ergänzen, z. B. direkt nach update_status.start():
+if not website_heartbeat.is_running():
+    website_heartbeat.start()
