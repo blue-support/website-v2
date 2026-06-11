@@ -28,6 +28,9 @@ const UNBAN_LOOKUP_FILE = path.join(__dirname, 'data', 'unban-lookup-requests.js
 
 const TICKET_API_SECRET = process.env.TICKET_API_SECRET || UNBAN_API_SECRET || HEARTBEAT_SECRET || '';
 const TICKETS_FILE = path.join(__dirname, 'data', 'tickets.json');
+const TICKET_ELIGIBILITY_FILE = path.join(__dirname, 'data', 'ticket-eligibility.json');
+const TICKET_ELIGIBILITY_LOOKUP_FILE = path.join(__dirname, 'data', 'ticket-eligibility-requests.json');
+const TICKET_DELETE_AFTER_DAYS = Number(process.env.TICKET_DELETE_AFTER_DAYS || 30);
 const TICKET_UPLOAD_DIR = path.join(__dirname, 'data', 'ticket-uploads');
 fs.mkdirSync(TICKET_UPLOAD_DIR, { recursive: true });
 
@@ -536,6 +539,77 @@ function ticketPrefix(type) {
   return type === 'head' ? 'head' : 'general';
 }
 
+function ticketDeleteAtFromNow() {
+  return new Date(Date.now() + Math.max(1, TICKET_DELETE_AFTER_DAYS) * 24 * 60 * 60 * 1000).toISOString();
+}
+
+function loadTicketEligibility() {
+  const data = loadJson(TICKET_ELIGIBILITY_FILE, { users: {} });
+  if (!data.users || typeof data.users !== 'object') data.users = {};
+  return data;
+}
+
+function saveTicketEligibility(data) {
+  if (!data.users || typeof data.users !== 'object') data.users = {};
+  saveJson(TICKET_ELIGIBILITY_FILE, data);
+}
+
+function loadTicketEligibilityRequests() {
+  const data = loadJson(TICKET_ELIGIBILITY_LOOKUP_FILE, { requests: [] });
+  if (!Array.isArray(data.requests)) data.requests = [];
+  return data;
+}
+
+function saveTicketEligibilityRequests(data) {
+  if (!Array.isArray(data.requests)) data.requests = [];
+  saveJson(TICKET_ELIGIBILITY_LOOKUP_FILE, data);
+}
+
+function queueTicketEligibilityCheck(user) {
+  if (!user?.id) return;
+  const data = loadTicketEligibilityRequests();
+  const now = Date.now();
+  const existing = data.requests.find((item) => item.user?.id === user.id && !item.done);
+  if (existing) {
+    existing.updatedAt = new Date().toISOString();
+    existing.lastRequestedAt = now;
+  } else {
+    data.requests.push({
+      id: `ticket_access_${now}_${crypto.randomUUID().slice(0, 8)}`,
+      user,
+      done: false,
+      createdAt: new Date().toISOString(),
+      lastRequestedAt: now
+    });
+  }
+  saveTicketEligibilityRequests(data);
+}
+
+function getTicketAccessForUser(user) {
+  if (!user?.id) return { ready: false, hasPremium: false, message: 'Bitte melde dich mit Discord an.' };
+  const data = loadTicketEligibility();
+  const entry = data.users[String(user.id)] || null;
+  const maxAge = 1000 * 60 * 5;
+  if (!entry || (entry.checkedAtMs && Date.now() - Number(entry.checkedAtMs) > maxAge)) {
+    queueTicketEligibilityCheck(user);
+    return {
+      ready: false,
+      hasPremium: false,
+      message: 'Premium-Rolle wird geprüft. Bitte warte kurz und aktualisiere die Seite.'
+    };
+  }
+  return {
+    ready: true,
+    hasPremium: Boolean(entry.hasPremium),
+    memberFound: Boolean(entry.memberFound),
+    highestRank: entry.highestRank || null,
+    checkedAt: entry.checkedAt || null,
+    message: entry.hasPremium
+      ? 'Premium-Zugriff bestätigt.'
+      : 'Du brauchst die Premium-Rolle auf dem Support Server, um Website-Tickets zu öffnen.'
+  };
+}
+
 function findTicketById(data, ticketId) {
   return data.tickets.find((ticket) => ticket.id === ticketId);
 }
@@ -556,6 +630,7 @@ function publicTicket(ticket) {
     claimedBy: ticket.claimedBy || null,
     createdAt: ticket.createdAt,
     closedAt: ticket.closedAt || null,
+    deleteAt: ticket.deleteAt || null,
     messages: Array.isArray(ticket.messages) ? ticket.messages : []
   };
 }
@@ -593,7 +668,8 @@ app.get('/api/tickets/me', requireUser, (req, res) => {
     .filter((ticket) => ticket.user?.id === req.session.discordUser.id)
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
     .map(publicTicket);
-  res.json({ ok: true, user: req.session.discordUser, tickets });
+  const ticketAccess = getTicketAccessForUser(req.session.discordUser);
+  res.json({ ok: true, user: req.session.discordUser, ticketAccess, tickets });
 });
 
 app.post('/api/tickets/create', requireUser, (req, res) => {
@@ -602,6 +678,14 @@ app.post('/api/tickets/create', requireUser, (req, res) => {
 
   const reason = sanitizeText(req.body.reason, 1200);
   if (!reason) return res.status(400).json({ ok: false, error: 'Bitte gib einen Grund an.' });
+
+  const ticketAccess = getTicketAccessForUser(req.session.discordUser);
+  if (!ticketAccess.ready) {
+    return res.status(423).json({ ok: false, error: ticketAccess.message || 'Premium-Status wird noch geprüft.' });
+  }
+  if (!ticketAccess.hasPremium) {
+    return res.status(403).json({ ok: false, error: ticketAccess.message || 'Du brauchst die Premium-Rolle, um ein Website-Ticket zu öffnen.' });
+  }
 
   const data = loadTickets();
   const openTicket = data.tickets.find((ticket) => ticket.user?.id === req.session.discordUser.id && ticket.status !== 'closed');
@@ -620,6 +704,7 @@ app.post('/api/tickets/create', requireUser, (req, res) => {
     claimedBy: null,
     createdAt: new Date().toISOString(),
     closedAt: null,
+    deleteAt: null,
     messages: []
   };
 
@@ -754,6 +839,8 @@ app.post('/api/tickets/bot/closed', requireTicketBot, (req, res) => {
   if (!ticket) return res.status(404).json({ ok: false, error: 'Ticket nicht gefunden.' });
   ticket.status = 'closed';
   ticket.closedAt = new Date().toISOString();
+  ticket.deleteAt = req.body.deleteAt || ticketDeleteAtFromNow();
+  ticket.closedChannelId = String(req.body.closedChannelId || ticket.channelId || '');
   addTicketMessage(ticket, {
     authorType: 'system',
     text: `${req.body.staff?.name || 'Ein Teammitglied'} hat dein Ticket geschlossen.`,
@@ -761,6 +848,64 @@ app.post('/api/tickets/bot/closed', requireTicketBot, (req, res) => {
   });
   saveTickets(data);
   res.json({ ok: true });
+});
+
+app.get('/api/tickets/bot/eligibility-requests', requireTicketBot, (_req, res) => {
+  const data = loadTicketEligibilityRequests();
+  const pending = [];
+  const seen = new Set();
+  for (const request of data.requests) {
+    if (request.done || !request.user?.id || seen.has(String(request.user.id))) continue;
+    seen.add(String(request.user.id));
+    pending.push(request);
+  }
+  res.json({ ok: true, requests: pending.slice(0, 50) });
+});
+
+app.post('/api/tickets/bot/eligibility-status', requireTicketBot, (req, res) => {
+  const userId = String(req.body?.userId || '');
+  if (!userId) return res.status(400).json({ ok: false, error: 'User ID fehlt.' });
+  const access = loadTicketEligibility();
+  access.users[userId] = {
+    userId,
+    hasPremium: Boolean(req.body.hasPremium),
+    memberFound: Boolean(req.body.memberFound),
+    highestRank: req.body.highestRank || null,
+    checkedAt: new Date().toISOString(),
+    checkedAtMs: Date.now()
+  };
+  saveTicketEligibility(access);
+
+  const requests = loadTicketEligibilityRequests();
+  requests.requests = requests.requests.map((item) => {
+    if (String(item.user?.id || '') === userId) return { ...item, done: true, doneAt: new Date().toISOString() };
+    return item;
+  }).slice(-200);
+  saveTicketEligibilityRequests(requests);
+  res.json({ ok: true });
+});
+
+app.get('/api/tickets/bot/cleanup-due', requireTicketBot, (_req, res) => {
+  const data = loadTickets();
+  const now = Date.now();
+  const due = data.tickets
+    .filter((ticket) => ticket.status === 'closed' && ticket.deleteAt && Date.parse(ticket.deleteAt) <= now)
+    .map((ticket) => ({ id: ticket.id, channelId: ticket.channelId || ticket.closedChannelId || null, channelName: ticket.channelName || null }));
+  res.json({ ok: true, tickets: due });
+});
+
+app.post('/api/tickets/bot/channel-deleted', requireTicketBot, (req, res) => {
+  const ticketId = String(req.body?.ticketId || '');
+  const channelId = String(req.body?.channelId || '');
+  const data = loadTickets();
+  const before = data.tickets.length;
+  data.tickets = data.tickets.filter((ticket) => {
+    if (ticketId && ticket.id === ticketId) return false;
+    if (channelId && String(ticket.channelId || ticket.closedChannelId || '') === channelId) return false;
+    return true;
+  });
+  saveTickets(data);
+  res.json({ ok: true, removed: before - data.tickets.length });
 });
 
 app.listen(port, () => {
