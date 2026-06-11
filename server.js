@@ -385,6 +385,17 @@ app.post('/api/unban/apply', requireUser, (req, res) => {
   }
 
   const cache = userBanCache(user.id);
+  const banInfo = cache?.[type] || null;
+  if (!banInfo?.checked) {
+    const lookup = loadLookupRequests();
+    lookup.requests[user.id] = { userId: user.id, requestedAt: new Date().toISOString() };
+    saveLookupRequests(lookup);
+    return res.status(409).json({ ok: false, error: 'Dein Ban-Status wird noch vom Bot geprüft. Bitte warte kurz und versuche es erneut.' });
+  }
+  if (!banInfo?.banned) {
+    return res.status(403).json({ ok: false, error: type === 'global' ? 'Für dich wurde kein aktiver Blue Security Global-Ban gefunden. Ein Antrag ist deshalb nicht möglich.' : 'Für dich wurde kein aktiver Discord-Ban gefunden. Ein Antrag ist deshalb nicht möglich.' });
+  }
+
   const application = {
     id: `unban_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
     type,
