@@ -589,24 +589,35 @@ function getTicketAccessForUser(user) {
   if (!user?.id) return { ready: false, hasPremium: false, message: 'Bitte melde dich mit Discord an.' };
   const data = loadTicketEligibility();
   const entry = data.users[String(user.id)] || null;
-  const maxAge = 1000 * 60 * 5;
-  if (!entry || (entry.checkedAtMs && Date.now() - Number(entry.checkedAtMs) > maxAge)) {
+  const maxAge = 1000 * 60; // Premium-Rolle wird spätestens alle 60 Sekunden neu geprüft.
+
+  if (!entry) {
     queueTicketEligibilityCheck(user);
     return {
       ready: false,
       hasPremium: false,
-      message: 'Premium-Rolle wird geprüft. Bitte warte kurz und aktualisiere die Seite.'
+      checking: true,
+      message: 'Premium-Rolle wird geprüft. Bitte warte kurz.'
     };
   }
+
+  const checkedAtMs = Number(entry.checkedAtMs || 0);
+  const isStale = !checkedAtMs || Date.now() - checkedAtMs > maxAge;
+  if (isStale) {
+    queueTicketEligibilityCheck(user);
+  }
+
   return {
     ready: true,
     hasPremium: Boolean(entry.hasPremium),
     memberFound: Boolean(entry.memberFound),
     highestRank: entry.highestRank || null,
     checkedAt: entry.checkedAt || null,
+    checking: isStale,
+    nextCheckInSeconds: 60,
     message: entry.hasPremium
-      ? 'Premium-Zugriff bestätigt.'
-      : 'Blue Premium benötigt: Du brauchst die Premium-Rolle auf dem Support Server, um Website-Tickets zu öffnen.'
+      ? (isStale ? 'Premium-Zugriff bestätigt. Blue prüft deine Rolle erneut.' : 'Premium-Zugriff bestätigt.')
+      : (isStale ? 'Blue Premium benötigt. Blue prüft deine Rolle erneut.' : 'Blue Premium benötigt: Du brauchst die Premium-Rolle auf dem Support Server, um Website-Tickets zu öffnen.')
   };
 }
 
