@@ -606,7 +606,7 @@ function getTicketAccessForUser(user) {
     checkedAt: entry.checkedAt || null,
     message: entry.hasPremium
       ? 'Premium-Zugriff bestätigt.'
-      : 'Du brauchst die Premium-Rolle auf dem Support Server, um Website-Tickets zu öffnen.'
+      : 'Blue Premium benötigt: Du brauchst die Premium-Rolle auf dem Support Server, um Website-Tickets zu öffnen.'
   };
 }
 
@@ -684,7 +684,7 @@ app.post('/api/tickets/create', requireUser, (req, res) => {
     return res.status(423).json({ ok: false, error: ticketAccess.message || 'Premium-Status wird noch geprüft.' });
   }
   if (!ticketAccess.hasPremium) {
-    return res.status(403).json({ ok: false, error: ticketAccess.message || 'Du brauchst die Premium-Rolle, um ein Website-Ticket zu öffnen.' });
+    return res.status(403).json({ ok: false, error: ticketAccess.message || 'Blue Premium benötigt: Du brauchst die Premium-Rolle, um ein Website-Ticket zu öffnen.' });
   }
 
   const data = loadTickets();
