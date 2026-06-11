@@ -471,6 +471,14 @@ function ticketStatusLabel(status) {
   return labels[status] || status || 'Unbekannt';
 }
 
+function ticketRankClass(rank) {
+  const normalized = String(rank || '').trim().toLowerCase();
+  if (normalized === 'ceo') return 'ceo';
+  if (normalized === 'administrator') return 'administrator';
+  if (normalized === 'moderator') return 'moderator';
+  return 'default';
+}
+
 function renderTicketMessage(message) {
   const type = message.authorType || 'system';
   const author = message.author || {};
@@ -483,7 +491,9 @@ function renderTicketMessage(message) {
   if (type === 'system') {
     return `<div class="ticket-message system"><p>${escapeHtml(message.text || '')}</p><small>${escapeHtml(new Date(message.createdAt).toLocaleString('de-DE'))}</small>${attachments}</div>`;
   }
-  const rank = type === 'staff' && author.rank ? `<span class="ticket-rank-badge">${escapeHtml(author.rank)}</span>` : '';
+  const rank = type === 'staff' && author.rank
+    ? `<span class="ticket-rank-badge ${ticketRankClass(author.rank)}">${escapeHtml(author.rank)}</span>`
+    : '';
   return `<div class="ticket-message ${type === 'user' ? 'user' : 'staff'}"><div class="ticket-message-head"><span class="ticket-message-avatar">${avatar ? `<img src="${escapeHtml(avatar)}" alt="">` : escapeHtml(initial)}</span><div><div class="ticket-message-author">${escapeHtml(name)}${rank}</div><div class="ticket-message-time">${escapeHtml(new Date(message.createdAt).toLocaleString('de-DE'))}</div></div></div>${message.text ? `<p>${escapeHtml(message.text)}</p>` : ''}${attachments}</div>`;
 }
 
@@ -518,12 +528,31 @@ async function initTicketPage() {
     if (messageBox) messageBox.hidden = true;
   }
 
+  function setTicketButtonState(button, text, disabled) {
+    button.disabled = Boolean(disabled);
+    button.textContent = text;
+    button.setAttribute('aria-disabled', String(Boolean(disabled)));
+    button.classList.toggle('disabled', Boolean(disabled));
+  }
+
+  function renderPremiumLockBadge(card, text) {
+    let badge = card.querySelector('.ticket-premium-lock');
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'ticket-premium-lock';
+      card.appendChild(badge);
+    }
+    badge.textContent = text;
+  }
+
   function setLockedState() {
-    $$('[data-open-ticket-form]').forEach((button) => {
-      button.disabled = true;
-      button.textContent = 'Erst einloggen';
+    if (createForm) createForm.hidden = true;
+    selectedCategory = null;
+    $$('[data-open-ticket-form]').forEach((button) => setTicketButtonState(button, 'Erst einloggen', true));
+    $$('.ticket-choice').forEach((card) => {
+      card.classList.add('locked', 'premium-required');
+      renderPremiumLockBadge(card, 'Discord Login erforderlich');
     });
-    $$('.ticket-choice').forEach((card) => card.classList.add('locked'));
     if (ticketList) ticketList.innerHTML = '<p class="muted">Bitte oben rechts mit Discord einloggen.</p>';
     showTicketMessage('Bitte melde dich oben rechts mit Discord an, um Tickets zu öffnen oder zu lesen.', 'warn');
   }
@@ -532,14 +561,24 @@ async function initTicketPage() {
     const allowed = Boolean(ticketAccess.ready && ticketAccess.hasPremium);
     $$('[data-open-ticket-form]').forEach((button) => {
       const type = button.dataset.openTicketForm;
-      button.disabled = !allowed;
-      if (!ticketAccess.ready) button.textContent = 'Premium wird geprüft';
-      else if (!ticketAccess.hasPremium) button.textContent = 'Premium benötigt';
-      else button.textContent = type === 'head' ? 'Leitung kontaktieren' : 'Allgemeinen Support öffnen';
+      if (!ticketAccess.ready) setTicketButtonState(button, 'Premium wird geprüft', true);
+      else if (!ticketAccess.hasPremium) setTicketButtonState(button, 'Blue Premium benötigt', true);
+      else setTicketButtonState(button, type === 'head' ? 'Leitung kontaktieren' : 'Allgemeinen Support öffnen', false);
     });
-    $$('.ticket-choice').forEach((card) => card.classList.toggle('locked', !allowed));
+    $$('.ticket-choice').forEach((card) => {
+      card.classList.toggle('locked', !allowed);
+      card.classList.toggle('premium-required', ticketAccess.ready && !ticketAccess.hasPremium);
+      card.classList.toggle('checking-premium', !ticketAccess.ready);
+      const existing = card.querySelector('.ticket-premium-lock');
+      if (!allowed) renderPremiumLockBadge(card, ticketAccess.ready ? 'Blue Premium benötigt' : 'Premium wird geprüft');
+      else if (existing) existing.remove();
+    });
+    if (createForm && !allowed) {
+      createForm.hidden = true;
+      selectedCategory = null;
+    }
     if (!ticketAccess.ready) showTicketMessage(ticketAccess.message || 'Premium-Rolle wird geprüft. Bitte warte kurz.', 'warn');
-    else if (!ticketAccess.hasPremium) showTicketMessage(ticketAccess.message || 'Du brauchst die Premium-Rolle auf dem Server, um Tickets zu öffnen.', 'error');
+    else if (!ticketAccess.hasPremium) showTicketMessage(ticketAccess.message || 'Blue Premium benötigt: Du brauchst die Premium-Rolle auf dem Server, um Tickets zu öffnen.', 'error');
     else clearTicketMessage();
   }
 
@@ -605,7 +644,7 @@ async function initTicketPage() {
     button.addEventListener('click', () => {
       if (!loggedIn) return showTicketMessage('Bitte melde dich oben rechts mit Discord an.', 'warn');
       if (!ticketAccess.ready) return showTicketMessage(ticketAccess.message || 'Premium-Rolle wird noch geprüft.', 'warn');
-      if (!ticketAccess.hasPremium) return showTicketMessage(ticketAccess.message || 'Du brauchst die Premium-Rolle, um Tickets zu öffnen.', 'error');
+      if (!ticketAccess.hasPremium) return showTicketMessage(ticketAccess.message || 'Blue Premium benötigt: Blue Premium benötigt: Blue Premium benötigt: Du brauchst die Premium-Rolle, um Tickets zu öffnen.', 'error');
       selectedCategory = button.dataset.openTicketForm;
       if (createForm) createForm.hidden = false;
       $('[data-ticket-form-type]').textContent = selectedCategory === 'head' ? 'Leitung kontaktieren' : 'Allgemeiner Support';
@@ -622,7 +661,7 @@ async function initTicketPage() {
   createForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (!selectedCategory) return showTicketMessage('Bitte wähle zuerst eine Kategorie.', 'warn');
-    if (!ticketAccess.ready || !ticketAccess.hasPremium) return showTicketMessage(ticketAccess.message || 'Du brauchst die Premium-Rolle, um Tickets zu öffnen.', 'error');
+    if (!ticketAccess.ready || !ticketAccess.hasPremium) return showTicketMessage(ticketAccess.message || 'Blue Premium benötigt: Blue Premium benötigt: Blue Premium benötigt: Du brauchst die Premium-Rolle, um Tickets zu öffnen.', 'error');
     const payload = Object.fromEntries(new FormData(createForm).entries());
     payload.type = selectedCategory;
     const response = await fetch('/api/tickets/create', {
