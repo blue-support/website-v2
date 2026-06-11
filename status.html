@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#3b82f6" />
+  <title>Bot Status — Blue ⚡</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+  <style>body{margin:0;background:#030712;color:#f7fbff;font-family:Inter,system-ui,sans-serif}a{color:inherit}</style>
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <canvas id="fx-canvas" aria-hidden="true"></canvas>
+  <div class="aurora"></div><div class="noise"></div><div class="orb one"></div><div class="orb two"></div>
+  <header class="site-header" data-header>
+    <a class="brand" href="index.html"><span class="brand-mark">⚡</span><span class="brand-text">Blue</span></a>
+    <button class="nav-toggle" type="button" aria-label="Menü öffnen" aria-expanded="false" data-nav-toggle><span></span><span></span><span></span></button>
+    <nav class="nav" data-nav><a class="" href="index.html">Home</a><a class="" href="index.html#features">Features</a><a class="active" href="status.html">Bot Status</a><a class="" href="unban.html">Unban Antrag</a><a class="" href="tos.html">TOS</a><a class="" href="privacy.html">Privacy</a><a class="" href="impressum.html">Impressum</a><a href="https://discord.com/oauth2/authorize?client_id=1321889022380871681&permissions=8&integration_type=0&scope=bot" target="_blank" rel="noopener">Bot Einladen</a><a class="nav-cta" href="https://dsc.blue-lol.de" target="_blank" rel="noopener">Support Server</a></nav>
+  </header>
+  <main>
+    <section class="page-hero status-page-hero wrapper reveal">
+      <p class="eyebrow"><span class="pulse-dot"></span> Live Monitoring</p>
+      <h1>Blue ⚡ <span class="text-gradient">Bot Status</span></h1>
+      <p>Hier siehst du, ob der Bot verbunden ist, welche Systeme laufen und ob es aktuelle Incidents gibt.</p>
+    </section>
+    <section class="section">
+      <div class="wrapper status-layout">
+        <article class="status-panel reveal">
+          <div class="big-status">
+            <div class="status-orb online" data-status-orb></div>
+            <div><h2 data-status-title>Alle Systeme operational</h2><p data-status-message>Blue ⚡ ist mit Discord verbunden.</p></div>
+          </div>
+          <div class="stats-strip" style="grid-template-columns:repeat(2,1fr);margin-top:22px">
+            <div class="stat-pill"><strong data-stat="guilds">—</strong><span>Server</span></div>
+            <div class="stat-pill"><strong data-stat="onlineUsers">—</strong><span>User online</span></div>
+            <div class="stat-pill"><strong data-stat="latency">—</strong><span>Ping</span></div>
+            <div class="stat-pill"><strong data-stat="uptime">—</strong><span>Uptime</span></div>
+          </div>
+        </article>
+        <aside class="status-panel reveal delay-1">
+          <h2>Komponenten</h2>
+          <div class="component-list" data-components>
+            <div class="component"><div><strong>Discord Gateway</strong><br><small>Service Status</small></div><span class="chip online">Online</span></div>
+            <div class="component"><div><strong>Slash Commands</strong><br><small>Service Status</small></div><span class="chip online">Online</span></div>
+            <div class="component"><div><strong>Website</strong><br><small>Service Status</small></div><span class="chip online">Online</span></div>
+          </div>
+        </aside>
+      </div>
+    </section>
+    <section class="section" style="padding-top:0">
+      <div class="wrapper status-panel reveal">
+        <h2>Incidents</h2>
+        <div class="incident-list" data-incidents>
+          <div class="incident"><strong>Keine aktiven Incidents</strong><small>Heute</small><p>Alle Systeme laufen normal.</p></div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <footer class="site-footer"><div class="wrapper footer-grid"><div><a class="brand" href="index.html"><span class="brand-mark">⚡</span><span class="brand-text">Blue</span></a><p>Der All-in-One Discord Bot für Community Server.</p></div><div class="footer-links"><strong>Website</strong><a href="index.html">Home</a><a href="status.html">Bot Status</a><a href="unban.html">Unban Antrag</a><a href="support.html">Support Server</a></div><div class="footer-links"><strong>Legal</strong><a href="impressum.html">Impressum</a><a href="tos.html">TOS</a><a href="privacy.html">Privacy</a></div><div class="footer-links"><strong>Action</strong><a href="https://discord.com/oauth2/authorize?client_id=1321889022380871681&permissions=8&integration_type=0&scope=bot" target="_blank" rel="noopener">Bot Einladen</a><a href="https://dsc.blue-lol.de" target="_blank" rel="noopener">Discord öffnen</a></div></div><div class="wrapper copyright"><span>© 2026 Alle Rechte vorbehalten</span><span>Blue ⚡ Community Bot</span></div></footer>
+  <script src="assets/app.js"></script>
+</body>
+</html>
