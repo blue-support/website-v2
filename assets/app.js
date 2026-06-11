@@ -361,16 +361,31 @@ async function initUnbanPage() {
     if (message) message.hidden = true;
 
     ['discord', 'global'].forEach((type) => {
+      const banInfo = data.banInfo?.[type];
+      const isChecked = banInfo?.checked === true;
+      const isBanned = banInfo?.banned === true;
       const infoBox = $(`[data-ban-info="${type}"]`);
-      if (infoBox) infoBox.innerHTML = formatBanPanel(data.banInfo?.[type]);
+      if (infoBox) infoBox.innerHTML = formatBanPanel(banInfo);
       const choice = $(`[data-unban-choice="${type}"]`);
       const btn = $(`[data-select-unban="${type}"]`);
       const pending = data.pending?.[type];
-      if (choice) choice.classList.toggle('disabled', Boolean(pending));
+      const disabled = Boolean(pending) || !isChecked || !isBanned;
+      if (choice) {
+        choice.classList.toggle('disabled', disabled);
+        choice.classList.toggle('not-banned', isChecked && !isBanned);
+      }
       if (btn) {
-        btn.disabled = Boolean(pending);
-        btn.removeAttribute('aria-disabled');
-        btn.textContent = pending ? 'Bereits in Bearbeitung' : (type === 'discord' ? 'Discord Unban wählen' : 'Global Unban wählen');
+        btn.disabled = disabled;
+        btn.setAttribute('aria-disabled', String(disabled));
+        if (pending) {
+          btn.textContent = 'Bereits in Bearbeitung';
+        } else if (!isChecked) {
+          btn.textContent = 'Ban-Status wird geprüft';
+        } else if (!isBanned) {
+          btn.textContent = 'Kein Ban gefunden';
+        } else {
+          btn.textContent = type === 'discord' ? 'Discord Unban wählen' : 'Global Unban wählen';
+        }
       }
     });
 
@@ -391,7 +406,10 @@ async function initUnbanPage() {
       if (!loggedIn) return;
       selectedType = button.dataset.selectUnban;
       const pending = state?.pending?.[selectedType];
+      const banInfo = state?.banInfo?.[selectedType];
       if (pending) return showMessage('Du hast bereits einen Antrag in Bearbeitung.', 'warn');
+      if (!banInfo?.checked) return showMessage('Dein Ban-Status wird noch geprüft. Bitte warte kurz und lade die Seite neu.', 'warn');
+      if (!banInfo?.banned) return showMessage('Für diesen Bereich wurde kein aktiver Ban gefunden. Deshalb kannst du keinen Unban-Antrag senden.', 'warn');
       form.hidden = false;
       $('[data-form-type]').textContent = selectedType === 'global' ? 'Blue Security Global Unban' : 'Discord Unban';
       form.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -407,6 +425,9 @@ async function initUnbanPage() {
     event.preventDefault();
     if (!loggedIn) return showMessage('Bitte melde dich zuerst oben rechts mit Discord an.', 'warn');
     if (!selectedType) return showMessage('Bitte wähle zuerst Discord Unban oder Global Unban.', 'warn');
+    const banInfo = state?.banInfo?.[selectedType];
+    if (!banInfo?.checked) return showMessage('Dein Ban-Status wird noch geprüft. Bitte warte kurz und versuche es erneut.', 'warn');
+    if (!banInfo?.banned) return showMessage('Für diesen Bereich wurde kein aktiver Ban gefunden. Ein Unban-Antrag ist deshalb nicht möglich.', 'warn');
     const payload = Object.fromEntries(new FormData(form).entries());
     payload.type = selectedType;
     payload.notifyDm = Boolean(form.querySelector('[name="notifyDm"]')?.checked);
@@ -428,6 +449,7 @@ async function initUnbanPage() {
 
   await refreshData();
   setTimeout(refreshData, 8000);
+  setInterval(refreshData, 30000);
 }
 
 initGlobalAuth();
