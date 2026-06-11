@@ -5,6 +5,7 @@ import session from 'express-session';
 import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
+import multer from 'multer';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -25,6 +26,25 @@ const UNBAN_APPLICATIONS_FILE = path.join(__dirname, 'data', 'unban-applications
 const UNBAN_BAN_CACHE_FILE = path.join(__dirname, 'data', 'unban-ban-cache.json');
 const UNBAN_LOOKUP_FILE = path.join(__dirname, 'data', 'unban-lookup-requests.json');
 
+const TICKET_API_SECRET = process.env.TICKET_API_SECRET || UNBAN_API_SECRET || HEARTBEAT_SECRET || '';
+const TICKETS_FILE = path.join(__dirname, 'data', 'tickets.json');
+const TICKET_UPLOAD_DIR = path.join(__dirname, 'data', 'ticket-uploads');
+fs.mkdirSync(TICKET_UPLOAD_DIR, { recursive: true });
+
+const ticketUploadStorage = multer.diskStorage({
+  destination(_req, _file, cb) {
+    cb(null, TICKET_UPLOAD_DIR);
+  },
+  filename(_req, file, cb) {
+    const ext = path.extname(file.originalname || '').slice(0, 16).replace(/[^a-zA-Z0-9.]/g, '') || '.bin';
+    cb(null, `${Date.now()}-${crypto.randomUUID()}${ext}`);
+  }
+});
+const ticketUpload = multer({
+  storage: ticketUploadStorage,
+  limits: { fileSize: 10 * 1024 * 1024, files: 5 }
+});
+
 let lastHeartbeat = loadHeartbeatFromDisk();
 
 app.set('trust proxy', 1);
@@ -43,6 +63,12 @@ app.use(session({
     maxAge: 1000 * 60 * 60 * 24 * 7
   }
 }));
+app.use('/ticket-uploads', express.static(TICKET_UPLOAD_DIR, {
+  setHeaders(res) {
+    res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+  }
+}));
+
 app.use(express.static(__dirname, {
   extensions: ['html'],
   setHeaders(res, filePath) {
@@ -215,6 +241,13 @@ function requireUser(req, res, next) {
 function requireBot(req, res, next) {
   if (!UNBAN_API_SECRET) return res.status(500).json({ ok: false, error: 'UNBAN_API_SECRET oder BOT_HEARTBEAT_SECRET fehlt im Website-Service.' });
   if (readSecret(req, 'x-blue-unban-secret') !== UNBAN_API_SECRET) return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  return next();
+}
+
+
+function requireTicketBot(req, res, next) {
+  if (!TICKET_API_SECRET) return res.status(500).json({ ok: false, error: 'TICKET_API_SECRET, UNBAN_API_SECRET oder BOT_HEARTBEAT_SECRET fehlt im Website-Service.' });
+  if (readSecret(req, 'x-blue-ticket-secret') !== TICKET_API_SECRET) return res.status(401).json({ ok: false, error: 'Unauthorized' });
   return next();
 }
 
@@ -480,10 +513,261 @@ app.post('/api/unban/bot/status', requireBot, (req, res) => {
   res.json({ ok: true });
 });
 
+
+// ------------------------------------------------------------
+// Blue Website Ticket Support API
+// ------------------------------------------------------------
+function loadTickets() {
+  const data = loadJson(TICKETS_FILE, { tickets: [] });
+  if (!Array.isArray(data.tickets)) data.tickets = [];
+  return data;
+}
+
+function saveTickets(data) {
+  if (!Array.isArray(data.tickets)) data.tickets = [];
+  saveJson(TICKETS_FILE, data);
+}
+
+function ticketTypeName(type) {
+  return type === 'head' ? 'Leitung' : 'Allgemeiner Support';
+}
+
+function ticketPrefix(type) {
+  return type === 'head' ? 'head' : 'general';
+}
+
+function findTicketById(data, ticketId) {
+  return data.tickets.find((ticket) => ticket.id === ticketId);
+}
+
+function userCanAccessTicket(req, ticket) {
+  return Boolean(req.session.discordUser && ticket?.user?.id === req.session.discordUser.id);
+}
+
+function publicTicket(ticket) {
+  return {
+    id: ticket.id,
+    type: ticket.type,
+    typeName: ticketTypeName(ticket.type),
+    reason: ticket.reason,
+    status: ticket.status,
+    channelId: ticket.channelId || null,
+    channelName: ticket.channelName || null,
+    claimedBy: ticket.claimedBy || null,
+    createdAt: ticket.createdAt,
+    closedAt: ticket.closedAt || null,
+    messages: Array.isArray(ticket.messages) ? ticket.messages : []
+  };
+}
+
+function mapTicketFiles(req, files) {
+  return (files || []).map((file) => ({
+    id: `file_${crypto.randomUUID().slice(0, 10)}`,
+    originalName: sanitizeText(file.originalname || 'Datei', 160),
+    fileName: file.filename,
+    mimeType: file.mimetype || 'application/octet-stream',
+    size: file.size || 0,
+    url: `${publicBaseUrl(req)}/ticket-uploads/${encodeURIComponent(file.filename)}`
+  }));
+}
+
+function addTicketMessage(ticket, message) {
+  if (!Array.isArray(ticket.messages)) ticket.messages = [];
+  const item = {
+    id: message.id || `msg_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
+    authorType: message.authorType || 'system',
+    author: message.author || null,
+    text: sanitizeText(message.text, 2000),
+    attachments: Array.isArray(message.attachments) ? message.attachments : [],
+    sentToDiscord: Boolean(message.sentToDiscord),
+    discordMessageId: message.discordMessageId || null,
+    createdAt: message.createdAt || new Date().toISOString()
+  };
+  ticket.messages.push(item);
+  return item;
+}
+
+app.get('/api/tickets/me', requireUser, (req, res) => {
+  const data = loadTickets();
+  const tickets = data.tickets
+    .filter((ticket) => ticket.user?.id === req.session.discordUser.id)
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+    .map(publicTicket);
+  res.json({ ok: true, user: req.session.discordUser, tickets });
+});
+
+app.post('/api/tickets/create', requireUser, (req, res) => {
+  const type = String(req.body?.type || '').toLowerCase();
+  if (!['general', 'head'].includes(type)) return res.status(400).json({ ok: false, error: 'Ungültige Ticket-Kategorie.' });
+
+  const reason = sanitizeText(req.body.reason, 1200);
+  if (!reason) return res.status(400).json({ ok: false, error: 'Bitte gib einen Grund an.' });
+
+  const data = loadTickets();
+  const openTicket = data.tickets.find((ticket) => ticket.user?.id === req.session.discordUser.id && ticket.status !== 'closed');
+  if (openTicket) {
+    return res.status(409).json({ ok: false, error: 'Du hast bereits ein offenes Ticket.', ticket: publicTicket(openTicket) });
+  }
+
+  const ticket = {
+    id: `ticket_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
+    type,
+    user: req.session.discordUser,
+    reason,
+    status: 'pending_channel',
+    channelId: null,
+    channelName: null,
+    claimedBy: null,
+    createdAt: new Date().toISOString(),
+    closedAt: null,
+    messages: []
+  };
+
+  addTicketMessage(ticket, {
+    authorType: 'system',
+    text: `Ticket erstellt: ${ticketTypeName(type)}. Der Bot erstellt gleich den Discord-Kanal.`,
+    sentToDiscord: true
+  });
+  addTicketMessage(ticket, {
+    authorType: 'user',
+    author: req.session.discordUser,
+    text: reason,
+    sentToDiscord: false
+  });
+
+  data.tickets.push(ticket);
+  saveTickets(data);
+  res.json({ ok: true, ticket: publicTicket(ticket) });
+});
+
+app.get('/api/tickets/:ticketId', requireUser, (req, res) => {
+  const data = loadTickets();
+  const ticket = findTicketById(data, req.params.ticketId);
+  if (!ticket || !userCanAccessTicket(req, ticket)) return res.status(404).json({ ok: false, error: 'Ticket nicht gefunden.' });
+  res.json({ ok: true, ticket: publicTicket(ticket) });
+});
+
+app.post('/api/tickets/:ticketId/messages', requireUser, ticketUpload.array('files', 5), (req, res) => {
+  const data = loadTickets();
+  const ticket = findTicketById(data, req.params.ticketId);
+  if (!ticket || !userCanAccessTicket(req, ticket)) return res.status(404).json({ ok: false, error: 'Ticket nicht gefunden.' });
+  if (ticket.status === 'closed') return res.status(409).json({ ok: false, error: 'Dieses Ticket ist geschlossen.' });
+
+  const text = sanitizeText(req.body.message, 2000);
+  const attachments = mapTicketFiles(req, req.files);
+  if (!text && !attachments.length) return res.status(400).json({ ok: false, error: 'Bitte schreibe eine Nachricht oder hänge eine Datei an.' });
+
+  const message = addTicketMessage(ticket, {
+    authorType: 'user',
+    author: req.session.discordUser,
+    text,
+    attachments,
+    sentToDiscord: false
+  });
+  saveTickets(data);
+  res.json({ ok: true, message, ticket: publicTicket(ticket) });
+});
+
+app.get('/api/tickets/bot/pending', requireTicketBot, (_req, res) => {
+  const data = loadTickets();
+  const tickets = data.tickets
+    .filter((ticket) => ticket.status !== 'closed')
+    .map((ticket) => ({
+      ...ticket,
+      typeName: ticketTypeName(ticket.type),
+      channelPrefix: ticketPrefix(ticket.type),
+      unsentUserMessages: (ticket.messages || []).filter((msg) => msg.authorType === 'user' && !msg.sentToDiscord)
+    }))
+    .filter((ticket) => ticket.status === 'pending_channel' || ticket.unsentUserMessages.length);
+  res.json({ ok: true, tickets });
+});
+
+app.post('/api/tickets/bot/channel-created', requireTicketBot, (req, res) => {
+  const data = loadTickets();
+  const ticket = findTicketById(data, String(req.body?.ticketId || ''));
+  if (!ticket) return res.status(404).json({ ok: false, error: 'Ticket nicht gefunden.' });
+  ticket.status = 'open';
+  ticket.channelId = String(req.body.channelId || '');
+  ticket.channelName = String(req.body.channelName || '');
+  ticket.panelMessageId = String(req.body.panelMessageId || '');
+  addTicketMessage(ticket, {
+    authorType: 'system',
+    text: `Dein Ticket-Kanal wurde erstellt: #${ticket.channelName || ticket.channelId}. Das Team kann dir jetzt antworten.`,
+    sentToDiscord: true
+  });
+  saveTickets(data);
+  res.json({ ok: true });
+});
+
+app.post('/api/tickets/bot/message-sent', requireTicketBot, (req, res) => {
+  const data = loadTickets();
+  const ticket = findTicketById(data, String(req.body?.ticketId || ''));
+  if (!ticket) return res.status(404).json({ ok: false, error: 'Ticket nicht gefunden.' });
+  const ids = Array.isArray(req.body.messageIds) ? req.body.messageIds.map(String) : [String(req.body.messageId || '')];
+  for (const message of ticket.messages || []) {
+    if (ids.includes(message.id)) {
+      message.sentToDiscord = true;
+      message.discordMessageId = String(req.body.discordMessageId || message.discordMessageId || '');
+    }
+  }
+  saveTickets(data);
+  res.json({ ok: true });
+});
+
+app.post('/api/tickets/bot/staff-message', requireTicketBot, (req, res) => {
+  const data = loadTickets();
+  const ticket = findTicketById(data, String(req.body?.ticketId || ''));
+  if (!ticket) return res.status(404).json({ ok: false, error: 'Ticket nicht gefunden.' });
+  if (ticket.status === 'closed' && req.body.authorType !== 'system') return res.status(409).json({ ok: false, error: 'Ticket ist geschlossen.' });
+  const message = addTicketMessage(ticket, {
+    authorType: req.body.authorType === 'system' ? 'system' : 'staff',
+    author: req.body.author || null,
+    text: req.body.text || '',
+    attachments: Array.isArray(req.body.attachments) ? req.body.attachments : [],
+    sentToDiscord: true,
+    discordMessageId: String(req.body.discordMessageId || '')
+  });
+  saveTickets(data);
+  res.json({ ok: true, message });
+});
+
+app.post('/api/tickets/bot/claim', requireTicketBot, (req, res) => {
+  const data = loadTickets();
+  const ticket = findTicketById(data, String(req.body?.ticketId || ''));
+  if (!ticket) return res.status(404).json({ ok: false, error: 'Ticket nicht gefunden.' });
+  const claimed = Boolean(req.body.claimed);
+  ticket.claimedBy = claimed ? (req.body.staff || null) : null;
+  addTicketMessage(ticket, {
+    authorType: 'system',
+    text: claimed
+      ? `${req.body.staff?.name || 'Ein Teammitglied'} hat dein Ticket beansprucht und kümmert sich nun um dich.`
+      : `${req.body.staff?.name || 'Ein Teammitglied'} hat das Ticket wieder freigegeben.`,
+    sentToDiscord: true
+  });
+  saveTickets(data);
+  res.json({ ok: true });
+});
+
+app.post('/api/tickets/bot/closed', requireTicketBot, (req, res) => {
+  const data = loadTickets();
+  const ticket = findTicketById(data, String(req.body?.ticketId || ''));
+  if (!ticket) return res.status(404).json({ ok: false, error: 'Ticket nicht gefunden.' });
+  ticket.status = 'closed';
+  ticket.closedAt = new Date().toISOString();
+  addTicketMessage(ticket, {
+    authorType: 'system',
+    text: `${req.body.staff?.name || 'Ein Teammitglied'} hat dein Ticket geschlossen.`,
+    sentToDiscord: true
+  });
+  saveTickets(data);
+  res.json({ ok: true });
+});
+
 app.listen(port, () => {
   console.log(`Blue Website läuft auf Port ${port}`);
   console.log(`Heartbeat Timeout: ${HEARTBEAT_TIMEOUT_SECONDS}s`);
   if (!HEARTBEAT_SECRET) console.warn('BOT_HEARTBEAT_SECRET fehlt. /api/heartbeat nimmt keine Heartbeats an.');
   if (!DISCORD_CLIENT_SECRET) console.warn('DISCORD_CLIENT_SECRET fehlt. Discord Login für Unban-Anträge ist deaktiviert.');
   if (!UNBAN_API_SECRET) console.warn('UNBAN_API_SECRET/BOT_HEARTBEAT_SECRET fehlt. Bot kann Unban-Anträge nicht abrufen.');
+  if (!TICKET_API_SECRET) console.warn('TICKET_API_SECRET/UNBAN_API_SECRET/BOT_HEARTBEAT_SECRET fehlt. Bot kann Website-Tickets nicht abrufen.');
 });
