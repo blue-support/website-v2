@@ -315,6 +315,7 @@ async function initUnbanPage() {
   let selectedType = null;
   let state = null;
   let loggedIn = false;
+  let ticketAccess = { ready: false, hasPremium: false };
 
   function showMessage(text, type = 'info') {
     if (!message) return;
@@ -482,7 +483,8 @@ function renderTicketMessage(message) {
   if (type === 'system') {
     return `<div class="ticket-message system"><p>${escapeHtml(message.text || '')}</p><small>${escapeHtml(new Date(message.createdAt).toLocaleString('de-DE'))}</small>${attachments}</div>`;
   }
-  return `<div class="ticket-message ${type === 'user' ? 'user' : 'staff'}"><div class="ticket-message-head"><span class="ticket-message-avatar">${avatar ? `<img src="${escapeHtml(avatar)}" alt="">` : escapeHtml(initial)}</span><div><div class="ticket-message-author">${escapeHtml(name)}</div><div class="ticket-message-time">${escapeHtml(new Date(message.createdAt).toLocaleString('de-DE'))}</div></div></div>${message.text ? `<p>${escapeHtml(message.text)}</p>` : ''}${attachments}</div>`;
+  const rank = type === 'staff' && author.rank ? `<span class="ticket-rank-badge">${escapeHtml(author.rank)}</span>` : '';
+  return `<div class="ticket-message ${type === 'user' ? 'user' : 'staff'}"><div class="ticket-message-head"><span class="ticket-message-avatar">${avatar ? `<img src="${escapeHtml(avatar)}" alt="">` : escapeHtml(initial)}</span><div><div class="ticket-message-author">${escapeHtml(name)}${rank}</div><div class="ticket-message-time">${escapeHtml(new Date(message.createdAt).toLocaleString('de-DE'))}</div></div></div>${message.text ? `<p>${escapeHtml(message.text)}</p>` : ''}${attachments}</div>`;
 }
 
 async function initTicketPage() {
@@ -503,6 +505,7 @@ async function initTicketPage() {
   let selectedCategory = null;
   let activeTicketId = null;
   let loggedIn = false;
+  let ticketAccess = { ready: false, hasPremium: false };
 
   function showTicketMessage(text, type = 'info') {
     if (!messageBox) return;
@@ -526,12 +529,18 @@ async function initTicketPage() {
   }
 
   function setUnlockedState() {
+    const allowed = Boolean(ticketAccess.ready && ticketAccess.hasPremium);
     $$('[data-open-ticket-form]').forEach((button) => {
-      button.disabled = false;
       const type = button.dataset.openTicketForm;
-      button.textContent = type === 'head' ? 'Leitung kontaktieren' : 'Allgemeinen Support öffnen';
+      button.disabled = !allowed;
+      if (!ticketAccess.ready) button.textContent = 'Premium wird geprüft';
+      else if (!ticketAccess.hasPremium) button.textContent = 'Premium benötigt';
+      else button.textContent = type === 'head' ? 'Leitung kontaktieren' : 'Allgemeinen Support öffnen';
     });
-    $$('.ticket-choice').forEach((card) => card.classList.remove('locked'));
+    $$('.ticket-choice').forEach((card) => card.classList.toggle('locked', !allowed));
+    if (!ticketAccess.ready) showTicketMessage(ticketAccess.message || 'Premium-Rolle wird geprüft. Bitte warte kurz.', 'warn');
+    else if (!ticketAccess.hasPremium) showTicketMessage(ticketAccess.message || 'Du brauchst die Premium-Rolle auf dem Server, um Tickets zu öffnen.', 'error');
+    else clearTicketMessage();
   }
 
   function openTicket(ticket) {
@@ -540,7 +549,12 @@ async function initTicketPage() {
     if (chat) chat.hidden = false;
     if (chatTitle) chatTitle.textContent = `#${ticket.channelName || ticket.id}`;
     if (chatType) chatType.textContent = ticketTypeLabel(ticket.type);
-    if (chatStatus) chatStatus.textContent = `${ticketStatusLabel(ticket.status)} · erstellt am ${new Date(ticket.createdAt).toLocaleString('de-DE')}`;
+    if (chatStatus) {
+      const base = `${ticketStatusLabel(ticket.status)} · erstellt am ${new Date(ticket.createdAt).toLocaleString('de-DE')}`;
+      chatStatus.textContent = ticket.status === 'closed' && ticket.deleteAt
+        ? `${base} · wird gelöscht am ${new Date(ticket.deleteAt).toLocaleString('de-DE')}`
+        : base;
+    }
     if (ticketState) {
       ticketState.textContent = ticketStatusLabel(ticket.status);
       ticketState.classList.toggle('closed', ticket.status === 'closed');
@@ -576,10 +590,10 @@ async function initTicketPage() {
       setLockedState();
       return;
     }
-    setUnlockedState();
-    clearTicketMessage();
     const ticketResponse = await fetch('/api/tickets/me', { cache: 'no-store' });
     const data = await ticketResponse.json();
+    ticketAccess = data.ticketAccess || { ready: false, hasPremium: false };
+    setUnlockedState();
     const tickets = Array.isArray(data.tickets) ? data.tickets : [];
     renderTicketList(tickets);
     let ticket = keepActive && activeTicketId ? tickets.find((item) => item.id === activeTicketId) : null;
@@ -590,6 +604,8 @@ async function initTicketPage() {
   $$('[data-open-ticket-form]').forEach((button) => {
     button.addEventListener('click', () => {
       if (!loggedIn) return showTicketMessage('Bitte melde dich oben rechts mit Discord an.', 'warn');
+      if (!ticketAccess.ready) return showTicketMessage(ticketAccess.message || 'Premium-Rolle wird noch geprüft.', 'warn');
+      if (!ticketAccess.hasPremium) return showTicketMessage(ticketAccess.message || 'Du brauchst die Premium-Rolle, um Tickets zu öffnen.', 'error');
       selectedCategory = button.dataset.openTicketForm;
       if (createForm) createForm.hidden = false;
       $('[data-ticket-form-type]').textContent = selectedCategory === 'head' ? 'Leitung kontaktieren' : 'Allgemeiner Support';
@@ -606,6 +622,7 @@ async function initTicketPage() {
   createForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (!selectedCategory) return showTicketMessage('Bitte wähle zuerst eine Kategorie.', 'warn');
+    if (!ticketAccess.ready || !ticketAccess.hasPremium) return showTicketMessage(ticketAccess.message || 'Du brauchst die Premium-Rolle, um Tickets zu öffnen.', 'error');
     const payload = Object.fromEntries(new FormData(createForm).entries());
     payload.type = selectedCategory;
     const response = await fetch('/api/tickets/create', {
