@@ -452,5 +452,194 @@ async function initUnbanPage() {
   setInterval(refreshData, 30000);
 }
 
+
+
+function discordAvatarUrl(user) {
+  if (!user) return '';
+  if (user.avatar && String(user.avatar).startsWith('http')) return user.avatar;
+  if (user.avatar && user.id) return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=96`;
+  return '';
+}
+
+function ticketTypeLabel(type) {
+  return type === 'head' ? 'Leitung' : 'Allgemeiner Support';
+}
+
+function ticketStatusLabel(status) {
+  const labels = { pending_channel: 'Kanal wird erstellt', open: 'Offen', closed: 'Geschlossen' };
+  return labels[status] || status || 'Unbekannt';
+}
+
+function renderTicketMessage(message) {
+  const type = message.authorType || 'system';
+  const author = message.author || {};
+  const name = type === 'system' ? 'Blue System' : (author.global_name || author.name || author.username || 'Unbekannt');
+  const avatar = discordAvatarUrl(author);
+  const initial = name.slice(0, 1).toUpperCase() || '⚡';
+  const attachments = Array.isArray(message.attachments) && message.attachments.length
+    ? `<div class="ticket-attachments">${message.attachments.map((file) => `<a class="ticket-attachment" href="${escapeHtml(file.url)}" target="_blank" rel="noopener">📎 ${escapeHtml(file.originalName || file.filename || 'Datei')}</a>`).join('')}</div>`
+    : '';
+  if (type === 'system') {
+    return `<div class="ticket-message system"><p>${escapeHtml(message.text || '')}</p><small>${escapeHtml(new Date(message.createdAt).toLocaleString('de-DE'))}</small>${attachments}</div>`;
+  }
+  return `<div class="ticket-message ${type === 'user' ? 'user' : 'staff'}"><div class="ticket-message-head"><span class="ticket-message-avatar">${avatar ? `<img src="${escapeHtml(avatar)}" alt="">` : escapeHtml(initial)}</span><div><div class="ticket-message-author">${escapeHtml(name)}</div><div class="ticket-message-time">${escapeHtml(new Date(message.createdAt).toLocaleString('de-DE'))}</div></div></div>${message.text ? `<p>${escapeHtml(message.text)}</p>` : ''}${attachments}</div>`;
+}
+
+async function initTicketPage() {
+  const root = $('[data-ticket-page]');
+  if (!root) return;
+
+  const messageBox = $('[data-ticket-message]');
+  const createForm = $('[data-ticket-create-form]');
+  const ticketList = $('[data-ticket-list]');
+  const empty = $('[data-ticket-empty]');
+  const chat = $('[data-ticket-chat]');
+  const chatTitle = $('[data-ticket-chat-title]');
+  const chatType = $('[data-ticket-chat-type]');
+  const chatStatus = $('[data-ticket-chat-status]');
+  const ticketState = $('[data-ticket-state]');
+  const messagesBox = $('[data-ticket-messages]');
+  const messageForm = $('[data-ticket-message-form]');
+  let selectedCategory = null;
+  let activeTicketId = null;
+  let loggedIn = false;
+
+  function showTicketMessage(text, type = 'info') {
+    if (!messageBox) return;
+    messageBox.hidden = false;
+    messageBox.className = `notice-card ${type}`;
+    messageBox.textContent = text;
+  }
+
+  function clearTicketMessage() {
+    if (messageBox) messageBox.hidden = true;
+  }
+
+  function setLockedState() {
+    $$('[data-open-ticket-form]').forEach((button) => {
+      button.disabled = true;
+      button.textContent = 'Erst einloggen';
+    });
+    $$('.ticket-choice').forEach((card) => card.classList.add('locked'));
+    if (ticketList) ticketList.innerHTML = '<p class="muted">Bitte oben rechts mit Discord einloggen.</p>';
+    showTicketMessage('Bitte melde dich oben rechts mit Discord an, um Tickets zu öffnen oder zu lesen.', 'warn');
+  }
+
+  function setUnlockedState() {
+    $$('[data-open-ticket-form]').forEach((button) => {
+      button.disabled = false;
+      const type = button.dataset.openTicketForm;
+      button.textContent = type === 'head' ? 'Leitung kontaktieren' : 'Allgemeinen Support öffnen';
+    });
+    $$('.ticket-choice').forEach((card) => card.classList.remove('locked'));
+  }
+
+  function openTicket(ticket) {
+    activeTicketId = ticket.id;
+    if (empty) empty.hidden = true;
+    if (chat) chat.hidden = false;
+    if (chatTitle) chatTitle.textContent = `#${ticket.channelName || ticket.id}`;
+    if (chatType) chatType.textContent = ticketTypeLabel(ticket.type);
+    if (chatStatus) chatStatus.textContent = `${ticketStatusLabel(ticket.status)} · erstellt am ${new Date(ticket.createdAt).toLocaleString('de-DE')}`;
+    if (ticketState) {
+      ticketState.textContent = ticketStatusLabel(ticket.status);
+      ticketState.classList.toggle('closed', ticket.status === 'closed');
+    }
+    if (messageForm) messageForm.hidden = ticket.status === 'closed';
+    if (messagesBox) {
+      messagesBox.innerHTML = (ticket.messages || []).map(renderTicketMessage).join('') || '<p class="muted">Noch keine Nachrichten.</p>';
+      messagesBox.scrollTop = messagesBox.scrollHeight;
+    }
+    $$('.ticket-list-item').forEach((node) => node.classList.toggle('active', node.dataset.ticketId === ticket.id));
+  }
+
+  function renderTicketList(tickets) {
+    if (!ticketList) return;
+    if (!tickets.length) {
+      ticketList.innerHTML = '<p class="muted">Du hast aktuell kein Ticket.</p>';
+      return;
+    }
+    ticketList.innerHTML = tickets.map((ticket) => `<button class="ticket-list-item" type="button" data-ticket-id="${escapeHtml(ticket.id)}"><strong>${escapeHtml(ticketTypeLabel(ticket.type))}</strong><small>${escapeHtml(ticketStatusLabel(ticket.status))} · ${escapeHtml(new Date(ticket.createdAt).toLocaleString('de-DE'))}</small></button>`).join('');
+    $$('[data-ticket-id]', ticketList).forEach((button) => {
+      button.addEventListener('click', () => {
+        const ticket = tickets.find((item) => item.id === button.dataset.ticketId);
+        if (ticket) openTicket(ticket);
+      });
+    });
+  }
+
+  async function loadTickets(keepActive = true) {
+    const response = await fetch('/api/auth/me', { cache: 'no-store' });
+    const auth = await response.json();
+    loggedIn = Boolean(auth.loggedIn);
+    if (!loggedIn) {
+      setLockedState();
+      return;
+    }
+    setUnlockedState();
+    clearTicketMessage();
+    const ticketResponse = await fetch('/api/tickets/me', { cache: 'no-store' });
+    const data = await ticketResponse.json();
+    const tickets = Array.isArray(data.tickets) ? data.tickets : [];
+    renderTicketList(tickets);
+    let ticket = keepActive && activeTicketId ? tickets.find((item) => item.id === activeTicketId) : null;
+    if (!ticket && tickets.length) ticket = tickets[0];
+    if (ticket) openTicket(ticket);
+  }
+
+  $$('[data-open-ticket-form]').forEach((button) => {
+    button.addEventListener('click', () => {
+      if (!loggedIn) return showTicketMessage('Bitte melde dich oben rechts mit Discord an.', 'warn');
+      selectedCategory = button.dataset.openTicketForm;
+      if (createForm) createForm.hidden = false;
+      $('[data-ticket-form-type]').textContent = selectedCategory === 'head' ? 'Leitung kontaktieren' : 'Allgemeiner Support';
+      $('[data-ticket-reason-label]').childNodes[0].textContent = selectedCategory === 'head' ? 'Warum möchtest du die Leitung kontaktieren?' : 'Warum möchtest du ein Ticket öffnen?';
+      createForm?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  });
+
+  $('[data-ticket-form-cancel]')?.addEventListener('click', () => {
+    if (createForm) createForm.hidden = true;
+    selectedCategory = null;
+  });
+
+  createForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!selectedCategory) return showTicketMessage('Bitte wähle zuerst eine Kategorie.', 'warn');
+    const payload = Object.fromEntries(new FormData(createForm).entries());
+    payload.type = selectedCategory;
+    const response = await fetch('/api/tickets/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.ok) return showTicketMessage(result.error || 'Ticket konnte nicht erstellt werden.', response.status === 409 ? 'warn' : 'error');
+    createForm.reset();
+    createForm.hidden = true;
+    activeTicketId = result.ticket?.id || null;
+    showTicketMessage('Dein Ticket wurde erstellt. Der Bot legt gerade den Discord-Kanal an.', 'success');
+    await loadTickets(true);
+  });
+
+  messageForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!activeTicketId) return;
+    const formData = new FormData(messageForm);
+    const response = await fetch(`/api/tickets/${encodeURIComponent(activeTicketId)}/messages`, {
+      method: 'POST',
+      body: formData
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.ok) return showTicketMessage(result.error || 'Nachricht konnte nicht gesendet werden.', 'error');
+    messageForm.reset();
+    await loadTickets(true);
+  });
+
+  await loadTickets(false);
+  setInterval(() => loadTickets(true).catch(() => null), 5000);
+}
+
 initGlobalAuth();
 initUnbanPage();
+initTicketPage();
