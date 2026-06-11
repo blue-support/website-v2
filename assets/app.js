@@ -268,17 +268,53 @@ function statusLabel(value) {
   return labels[value] || value || 'Unbekannt';
 }
 
+
+async function initGlobalAuth() {
+  const authSlots = $$('[data-global-auth]');
+  if (!authSlots.length) return;
+
+  let auth = { loggedIn: false, user: null };
+  try {
+    const response = await fetch('/api/auth/me', { cache: 'no-store' });
+    auth = await response.json();
+  } catch (error) {
+    console.warn('Login-Status konnte nicht geladen werden:', error);
+  }
+
+  authSlots.forEach((slot) => {
+    const returnPath = slot.dataset.authReturn || (window.location.pathname || '/index.html');
+    if (!auth.loggedIn || !auth.user) {
+      slot.innerHTML = `<a class="nav-login" href="/auth/discord?return=${encodeURIComponent(returnPath)}">Discord Login</a>`;
+      return;
+    }
+
+    const displayName = auth.user.global_name || auth.user.username || 'Discord User';
+    const initial = displayName.slice(0, 1).toUpperCase();
+    slot.innerHTML = `
+      <div class="nav-user-pill" title="${escapeHtml(displayName)}">
+        <span class="nav-user-avatar">${escapeHtml(initial)}</span>
+        <span class="nav-user-name">${escapeHtml(displayName)}</span>
+        <button class="nav-logout" type="button" data-global-logout>Logout</button>
+      </div>
+    `;
+    $('[data-global-logout]', slot)?.addEventListener('click', async () => {
+      await fetch('/auth/logout', { method: 'POST' });
+      window.location.reload();
+    });
+  });
+}
+
 async function initUnbanPage() {
-  const authBox = $('[data-unban-auth]');
   const choices = $('[data-unban-choices]');
   const message = $('[data-unban-message]');
   const form = $('[data-unban-form]');
   const historyBox = $('[data-unban-history]');
   const historyList = $('[data-history-list]');
-  if (!authBox || !choices || !form) return;
+  if (!choices || !form) return;
 
   let selectedType = null;
   let state = null;
+  let loggedIn = false;
 
   function showMessage(text, type = 'info') {
     if (!message) return;
@@ -287,33 +323,42 @@ async function initUnbanPage() {
     message.textContent = text;
   }
 
+  function setLoginRequiredState() {
+    choices.hidden = false;
+    form.hidden = true;
+    if (historyBox) historyBox.hidden = true;
+    ['discord', 'global'].forEach((type) => {
+      const infoBox = $(`[data-ban-info="${type}"]`);
+      if (infoBox) {
+        infoBox.innerHTML = '<strong>Status:</strong> Login erforderlich<br><strong>Hinweis:</strong> Melde dich oben rechts mit Discord an, damit wir deinen Ban-Status prüfen können.';
+      }
+      const choice = $(`[data-unban-choice="${type}"]`);
+      const btn = $(`[data-select-unban="${type}"]`);
+      if (choice) choice.classList.add('disabled');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Erst einloggen';
+        btn.setAttribute('aria-disabled', 'true');
+      }
+    });
+    showMessage('Bitte melde dich oben rechts mit Discord an, bevor du einen Unban-Antrag auswählen kannst.', 'warn');
+  }
+
   async function refreshData() {
     const response = await fetch('/api/auth/me', { cache: 'no-store' });
     const auth = await response.json();
-    if (!auth.loggedIn) {
-      authBox.innerHTML = '<h2>Discord Login</h2><p>Du musst dich anmelden, damit dein Antrag eindeutig deiner Discord-ID zugeordnet werden kann.</p><a class="btn primary" href="/auth/discord?return=/unban.html">Mit Discord anmelden</a>';
-      choices.hidden = true;
-      form.hidden = true;
+    loggedIn = Boolean(auth.loggedIn);
+
+    if (!loggedIn) {
+      setLoginRequiredState();
       return;
     }
-
-    authBox.innerHTML = `
-      <h2>Eingeloggt</h2>
-      <div class="discord-user-card">
-        <span class="user-avatar">${escapeHtml((auth.user.global_name || auth.user.username || 'U').slice(0, 1).toUpperCase())}</span>
-        <div><strong>${escapeHtml(auth.user.global_name || auth.user.username)}</strong><small>ID: ${escapeHtml(auth.user.id)}</small></div>
-      </div>
-      <button class="btn ghost" data-unban-logout>Abmelden</button>
-    `;
-    $('[data-unban-logout]', authBox)?.addEventListener('click', async () => {
-      await fetch('/auth/logout', { method: 'POST' });
-      window.location.reload();
-    });
 
     await fetch('/api/unban/request-lookup', { method: 'POST' }).catch(() => null);
     const data = await (await fetch('/api/unban/me', { cache: 'no-store' })).json();
     state = data;
     choices.hidden = false;
+    if (message) message.hidden = true;
 
     ['discord', 'global'].forEach((type) => {
       const infoBox = $(`[data-ban-info="${type}"]`);
@@ -324,6 +369,7 @@ async function initUnbanPage() {
       if (choice) choice.classList.toggle('disabled', Boolean(pending));
       if (btn) {
         btn.disabled = Boolean(pending);
+        btn.removeAttribute('aria-disabled');
         btn.textContent = pending ? 'Bereits in Bearbeitung' : (type === 'discord' ? 'Discord Unban wählen' : 'Global Unban wählen');
       }
     });
@@ -342,6 +388,7 @@ async function initUnbanPage() {
 
   $$('[data-select-unban]').forEach((button) => {
     button.addEventListener('click', () => {
+      if (!loggedIn) return;
       selectedType = button.dataset.selectUnban;
       const pending = state?.pending?.[selectedType];
       if (pending) return showMessage('Du hast bereits einen Antrag in Bearbeitung.', 'warn');
@@ -358,6 +405,7 @@ async function initUnbanPage() {
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
+    if (!loggedIn) return showMessage('Bitte melde dich zuerst oben rechts mit Discord an.', 'warn');
     if (!selectedType) return showMessage('Bitte wähle zuerst Discord Unban oder Global Unban.', 'warn');
     const payload = Object.fromEntries(new FormData(form).entries());
     payload.type = selectedType;
@@ -382,4 +430,5 @@ async function initUnbanPage() {
   setTimeout(refreshData, 8000);
 }
 
+initGlobalAuth();
 initUnbanPage();

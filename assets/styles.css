@@ -585,3 +585,52 @@ body::-webkit-scrollbar,
   .nav-wrapper .nav a{padding:13px 16px}
   .nav-toggle{display:block}
 }
+
+
+/* --- Global Discord login + Unban locked state fix --- */
+.site-header{
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+.site-header > .brand{flex:0 0 auto}
+.site-header > .nav{margin-left:auto;min-width:0;flex:1 1 auto;justify-content:flex-end;flex-wrap:nowrap}
+.nav-auth{flex:0 0 auto;display:flex;align-items:center;justify-content:flex-end;min-width:max-content}
+.nav-login,.nav-user-pill{
+  display:inline-flex;align-items:center;justify-content:center;gap:9px;
+  min-height:42px;padding:0 14px;border-radius:999px;
+  color:#fff;font-weight:900;font-size:.9rem;
+  border:1px solid rgba(125,211,252,.28);
+  background:linear-gradient(135deg,rgba(59,130,246,.96),rgba(34,211,238,.86));
+  box-shadow:0 12px 34px rgba(37,99,235,.28);
+  white-space:nowrap;
+}
+.nav-user-pill{padding:4px 8px 4px 6px;background:rgba(255,255,255,.075);border-color:rgba(155,190,255,.2);box-shadow:inset 0 1px 0 rgba(255,255,255,.09)}
+.nav-user-avatar{width:32px;height:32px;border-radius:999px;display:grid;place-items:center;background:linear-gradient(135deg,var(--blue),var(--cyan));color:#fff;font-weight:1000;box-shadow:0 0 22px rgba(34,211,238,.28)}
+.nav-user-name{max-width:118px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f8fbff}
+.nav-logout{border:0;border-radius:999px;padding:8px 10px;background:rgba(255,255,255,.08);color:#cfe3ff;font-weight:900;cursor:pointer;transition:.2s ease}
+.nav-logout:hover{background:rgba(248,113,113,.16);color:#fff}
+.unban-layout-single{display:block;max-width:980px}
+.unban-layout-single .unban-main{width:100%}
+.unban-choice.disabled{opacity:.72;filter:saturate(.7)}
+.unban-choice button:disabled{cursor:not-allowed;transform:none;opacity:.78;color:#dbeafe!important;background:rgba(148,163,184,.13)!important;border-color:rgba(148,163,184,.28)!important;box-shadow:none!important}
+.unban-choice button:disabled:hover{transform:none;color:#dbeafe!important}
+
+@media (max-width:1200px){
+  .site-header{border-radius:24px}
+  .site-header > .nav{
+    position:absolute;left:0;right:0;top:calc(100% + 10px);display:none;
+    flex-direction:column;align-items:stretch;justify-content:flex-start;
+    padding:14px;border:1px solid var(--stroke);border-radius:24px;
+    background:rgba(4,10,25,.95);backdrop-filter:blur(20px);
+  }
+  .site-header > .nav.open{display:flex}
+  .site-header > .nav a{padding:13px 16px}
+  .nav-toggle{display:block;order:3;flex:0 0 auto}
+  .nav-auth{margin-left:auto;order:2}
+}
+@media (max-width:640px){
+  .nav-user-name{display:none}
+  .nav-login{padding:0 12px;font-size:.82rem}
+  .nav-user-pill{gap:6px}.nav-logout{padding:7px 8px;font-size:.8rem}
+}
