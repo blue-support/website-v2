@@ -986,7 +986,10 @@ async function initDashboardPage() {
     const image = $('[data-message-preview-image]');
     const footer = $('[data-message-preview-footer]');
     const color = embed.color || '#38bdf8';
-    if (card) card.style.borderLeftColor = color;
+    if (card) {
+      card.style.borderLeftColor = color;
+      card.classList.toggle('has-thumbnail', Boolean(embed.thumbnail));
+    }
     if (author) {
       const authorImage = embed.authorImage ? `<img src="${escapeHtml(embed.authorImage)}" alt="">` : '';
       author.innerHTML = embed.author ? `${authorImage}<span>${escapeHtml(embed.author)}</span>` : '';
@@ -1098,19 +1101,37 @@ async function initDashboardPage() {
 
   function updateVerifyPreview() {
     if (!form) return;
-    const title = form.querySelector('[name="title"]')?.value || '✅ Verifizierung erforderlich';
-    const description = form.querySelector('[name="description"]')?.value || '';
+    const titleValue = form.querySelector('[name="title"]')?.value || '✅ Verifizierung erforderlich';
+    const descriptionValue = form.querySelector('[name="description"]')?.value || 'Um Zugriff auf alle Kanäle zu erhalten, musst du dich zuerst verifizieren.';
     const color = form.querySelector('[name="color"]')?.value || '#22c55e';
-    const image = form.querySelector('[name="image"]')?.value || form.querySelector('[name="thumbnail"]')?.value || '';
-    const footer = form.querySelector('[name="footer"]')?.value || 'Powered by Blue ⚡';
-    $('[data-verify-preview-title]').textContent = title;
-    $('[data-verify-preview-description]').textContent = description;
-    $('[data-verify-preview-footer]').textContent = footer;
-    const media = $('[data-verify-preview-media]');
-    if (media) {
-      media.style.borderColor = color;
-      media.innerHTML = image ? `<img src="${escapeHtml(image)}" alt="Embed Vorschau">` : 'Embed Image / Thumbnail';
+    const thumbnailValue = form.querySelector('[name="thumbnail"]')?.value || '';
+    const imageValue = form.querySelector('[name="image"]')?.value || '';
+    const footerValue = form.querySelector('[name="footer"]')?.value || 'Powered by Blue ⚡';
+    const card = $('[data-verify-preview-card]');
+    const title = $('[data-verify-preview-title]');
+    const description = $('[data-verify-preview-description]');
+    const thumbnail = $('[data-verify-preview-thumbnail]');
+    const image = $('[data-verify-preview-image]');
+    const footer = $('[data-verify-preview-footer]');
+    if (card) {
+      card.style.borderLeftColor = color;
+      card.classList.toggle('has-thumbnail', Boolean(thumbnailValue));
     }
+    if (title) {
+      title.textContent = titleValue;
+      title.href = '#';
+      title.classList.remove('muted-link');
+    }
+    if (description) description.textContent = descriptionValue;
+    if (thumbnail) {
+      thumbnail.hidden = !thumbnailValue;
+      if (thumbnailValue) thumbnail.src = thumbnailValue;
+    }
+    if (image) {
+      image.hidden = !imageValue;
+      if (imageValue) image.src = imageValue;
+    }
+    if (footer) footer.textContent = footerValue;
   }
 
   form?.addEventListener('input', () => { dashboardDirty = true; updateVerifyPreview(); });
