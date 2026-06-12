@@ -580,8 +580,10 @@ app.post('/api/dashboard/guild/:guildId/verification', requireUser, (req, res) =
   const addRoleIds = Array.isArray(body.addRoleIds) ? body.addRoleIds.map(String).filter((id) => availableRoleIds.has(id)) : [];
   const removeRoleIds = Array.isArray(body.removeRoleIds) ? body.removeRoleIds.map(String).filter((id) => availableRoleIds.has(id)) : [];
   const channelId = String(body.channelId || '').replace(/\D/g, '');
+  const logChannelId = String(body.logChannelId || '').replace(/\D/g, '');
   if (!addRoleIds.length) return res.status(400).json({ ok: false, error: 'Bitte wähle mindestens eine Rolle, die hinzugefügt werden soll.' });
-  if (!availableChannelIds.has(channelId)) return res.status(400).json({ ok: false, error: 'Bitte wähle einen gültigen Textkanal.' });
+  if (!availableChannelIds.has(channelId)) return res.status(400).json({ ok: false, error: 'Bitte wähle einen gültigen Textkanal für das Verify Panel.' });
+  if (logChannelId && !availableChannelIds.has(logChannelId)) return res.status(400).json({ ok: false, error: 'Bitte wähle einen gültigen Textkanal für Verify Logs oder lasse das Feld leer.' });
 
   const canEditFooter = Boolean(access.hasPremiumFooter);
   const embed = {
@@ -602,6 +604,7 @@ app.post('/api/dashboard/guild/:guildId/verification', requireUser, (req, res) =
     addRoleIds,
     removeRoleIds,
     channelId,
+    logChannelId: logChannelId || null,
     minAccountAgeEnabled,
     minAccountAgeDays,
     embed,
