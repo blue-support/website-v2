@@ -721,6 +721,10 @@ async function initDashboardPage() {
   let selectedGuildId = null;
   let selectedGuildData = null;
   let access = null;
+  let dashboardRoles = [];
+  let selectedAddRoleIds = new Set();
+  let selectedRemoveRoleIds = new Set();
+  let dashboardDirty = false;
 
   function showDashboardMessage(text, type = 'info') {
     if (!messageBox) return;
@@ -753,6 +757,67 @@ async function initDashboardPage() {
     }).join('');
   }
 
+  function roleColorStyle(role) {
+    const color = String(role?.color || '').trim();
+    if (!color || color === '#000000' || color === '0' || color.toLowerCase() === 'default') return '';
+    return ` style="--role-color:${escapeHtml(color)}"`;
+  }
+
+  function renderSelectedRoleTags(target, selectedSet) {
+    const container = $(target);
+    if (!container) return;
+    const selectedRoles = dashboardRoles.filter((role) => selectedSet.has(String(role.id)));
+    if (!selectedRoles.length) {
+      container.innerHTML = '<span class="muted">Keine Rolle gewählt</span>';
+      return;
+    }
+    container.innerHTML = selectedRoles.map((role) => (
+      `<button class="selected-role-tag" type="button" data-remove-role="${escapeHtml(role.id)}"${roleColorStyle(role)}><span>@${escapeHtml(role.name)}</span><b aria-hidden="true">×</b></button>`
+    )).join('');
+    $$('[data-remove-role]', container).forEach((button) => {
+      button.addEventListener('click', () => {
+        selectedSet.delete(String(button.dataset.removeRole));
+        dashboardDirty = true;
+        renderRolePickers();
+      });
+    });
+  }
+
+  function renderRolePicker(target, selectedSet, oppositeSet, mode) {
+    const container = $(target);
+    if (!container) return;
+    if (!dashboardRoles.length) {
+      container.innerHTML = '<p class="muted">Keine Rollen gefunden. Prüfe die Bot-Berechtigungen.</p>';
+      return;
+    }
+    container.innerHTML = dashboardRoles.map((role) => {
+      const id = String(role.id);
+      const active = selectedSet.has(id);
+      return `<button class="role-chip ${active ? 'active' : ''}" type="button" data-role-chip="${escapeHtml(id)}" data-role-mode="${escapeHtml(mode)}"${roleColorStyle(role)}><span class="role-dot"></span>@${escapeHtml(role.name)}</button>`;
+    }).join('');
+    $$('[data-role-chip]', container).forEach((button) => {
+      button.addEventListener('click', () => {
+        const id = String(button.dataset.roleChip || '');
+        if (!id) return;
+        if (selectedSet.has(id)) {
+          selectedSet.delete(id);
+        } else {
+          selectedSet.add(id);
+          if (oppositeSet) oppositeSet.delete(id);
+        }
+        dashboardDirty = true;
+        renderRolePickers();
+      });
+    });
+  }
+
+  function renderRolePickers() {
+    renderRolePicker('[data-dashboard-add-role-picker]', selectedAddRoleIds, selectedRemoveRoleIds, 'add');
+    renderRolePicker('[data-dashboard-remove-role-picker]', selectedRemoveRoleIds, selectedAddRoleIds, 'remove');
+    renderSelectedRoleTags('[data-dashboard-add-selected]', selectedAddRoleIds);
+    renderSelectedRoleTags('[data-dashboard-remove-selected]', selectedRemoveRoleIds);
+  }
+
   function renderGuildConfig(data) {
     selectedGuildData = data.guild;
     access = data.access || { checked: false, hasPremiumFooter: false };
@@ -760,8 +825,11 @@ async function initDashboardPage() {
     $('[data-dashboard-server-meta]').textContent = `${formatValue(selectedGuildData.memberCount)} Mitglieder · ${access.checked ? (access.canManage ? 'Administrator bestätigt' : 'Administrator benötigt') : 'Administrator wird geprüft'}`;
     const roles = (selectedGuildData.roles || []).filter((role) => !role.managed && !role.default).sort((a, b) => (b.position || 0) - (a.position || 0));
     const channels = (selectedGuildData.channels || []).filter((channel) => ['text', 'news', 'forum'].includes(channel.type));
-    $('[data-dashboard-add-roles]').innerHTML = dashboardSelectOptions(roles, data.verification?.addRoleIds || data.verification?.role_ids || []);
-    $('[data-dashboard-remove-roles]').innerHTML = dashboardSelectOptions(roles, data.verification?.removeRoleIds || data.verification?.remove_role_ids || []);
+    dashboardRoles = roles;
+    selectedAddRoleIds = new Set((data.verification?.addRoleIds || data.verification?.role_ids || []).map(String));
+    selectedRemoveRoleIds = new Set((data.verification?.removeRoleIds || data.verification?.remove_role_ids || []).map(String));
+    selectedAddRoleIds.forEach((id) => selectedRemoveRoleIds.delete(id));
+    renderRolePickers();
     $('[data-dashboard-channel-select]').innerHTML = dashboardSelectOptions(channels, [data.verification?.channelId || data.verification?.channel_id].filter(Boolean));
     const logChannelSelect = $('[data-dashboard-log-channel-select]');
     if (logChannelSelect) {
@@ -843,7 +911,8 @@ async function initDashboardPage() {
     }
   }
 
-  form?.addEventListener('input', updateVerifyPreview);
+  form?.addEventListener('input', () => { dashboardDirty = true; updateVerifyPreview(); });
+  form?.addEventListener('change', () => { dashboardDirty = true; updateVerifyPreview(); });
   $('[data-dashboard-refresh]')?.addEventListener('click', async () => {
     if (selectedGuildId) await loadGuild(selectedGuildId);
   });
@@ -869,8 +938,9 @@ async function initDashboardPage() {
     event.preventDefault();
     if (!selectedGuildId) return showDashboardMessage('Bitte wähle zuerst einen Server.', 'warn');
     const formData = new FormData(form);
-    const addRoleIds = Array.from(form.querySelector('[name="addRoleIds"]').selectedOptions).map((option) => option.value);
-    const removeRoleIds = Array.from(form.querySelector('[name="removeRoleIds"]').selectedOptions).map((option) => option.value);
+    const addRoleIds = Array.from(selectedAddRoleIds);
+    const removeRoleIds = Array.from(selectedRemoveRoleIds);
+    if (!addRoleIds.length) return showDashboardMessage('Bitte wähle mindestens eine Rolle zum Hinzufügen aus.', 'warn');
     const payload = {
       mode: formData.get('mode'),
       addRoleIds,
@@ -895,14 +965,12 @@ async function initDashboardPage() {
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok || !result.ok) return showDashboardMessage(result.error || 'Verify Panel konnte nicht gespeichert werden.', 'error');
-    showDashboardMessage('Verify Panel wird vom Bot gesendet. Das kann ein paar Sekunden dauern.', 'success');
-    setTimeout(() => selectedGuildId && loadGuild(selectedGuildId).catch(() => null), 2500);
+    dashboardDirty = false;
+    showDashboardMessage('Verify Panel wird vom Bot gesendet. Deine Auswahl bleibt sichtbar.', 'success');
   });
 
   await loadDashboard();
-  setInterval(() => {
-    if (selectedGuildId) loadGuild(selectedGuildId).catch(() => null);
-  }, 30000);
+  // Kein automatisches Neuladen im Dashboard: sonst werden gerade bearbeitete Einstellungen zurückgesetzt.
 }
 
 initGlobalAuth();
