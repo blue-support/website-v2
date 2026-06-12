@@ -22,7 +22,11 @@ const DISCORD_CLIENT_ID = String(process.env.DISCORD_CLIENT_ID || process.env.CL
 const DISCORD_CLIENT_SECRET = String(process.env.DISCORD_CLIENT_SECRET || '').trim();
 const PUBLIC_SITE_URL = String(process.env.PUBLIC_SITE_URL || process.env.WEBSITE_PUBLIC_URL || '').trim().replace(/\/$/, '');
 const DISCORD_OAUTH_RATE_LIMIT_FILE = path.join(__dirname, 'data', 'discord-oauth-rate-limit.json');
-const DISCORD_OAUTH_MIN_RETRY_SECONDS = Number(process.env.DISCORD_OAUTH_MIN_RETRY_SECONDS || 30);
+const DISCORD_OAUTH_MIN_RETRY_SECONDS = Number(process.env.DISCORD_OAUTH_MIN_RETRY_SECONDS || 5);
+// Nur kurzer lokaler Schutz gegen Doppelklicks/Callback-Refresh.
+// Keine lange gespeicherte Sperre mehr, damit Logout -> späterer Login nicht fälschlich 30-60 Minuten blockiert.
+const DISCORD_OAUTH_FALLBACK_RETRY_SECONDS = Number(process.env.DISCORD_OAUTH_FALLBACK_RETRY_SECONDS || 60);
+const DISCORD_OAUTH_MAX_LOCAL_BLOCK_SECONDS = Number(process.env.DISCORD_OAUTH_MAX_LOCAL_BLOCK_SECONDS || 90);
 const UNBAN_API_SECRET = process.env.UNBAN_API_SECRET || HEARTBEAT_SECRET || '';
 const UNBAN_APPLICATIONS_FILE = path.join(__dirname, 'data', 'unban-applications.json');
 const UNBAN_BAN_CACHE_FILE = path.join(__dirname, 'data', 'unban-ban-cache.json');
@@ -58,7 +62,14 @@ const ticketUpload = multer({
 });
 
 let lastHeartbeat = loadHeartbeatFromDisk();
-let discordOAuthBlockedUntil = loadDiscordOAuthBlockedUntil();
+let discordOAuthBlockedUntil = 0;
+try {
+  // Alte gespeicherte Rate-Limit-Datei aus vorherigen Fixes entfernen.
+  // Diese Datei konnte nach Logout/erneutem Login falsche Wartezeiten anzeigen.
+  if (fs.existsSync(DISCORD_OAUTH_RATE_LIMIT_FILE)) fs.rmSync(DISCORD_OAUTH_RATE_LIMIT_FILE, { force: true });
+} catch (error) {
+  console.warn('Alte Discord OAuth Rate-Limit-Datei konnte nicht entfernt werden:', error.message);
+}
 const recentlyProcessedOAuthCodes = new Map();
 
 function loadDiscordOAuthBlockedUntil() {
@@ -71,11 +82,13 @@ function loadDiscordOAuthBlockedUntil() {
   }
 }
 
-function saveDiscordOAuthBlockedUntil(value) {
+function saveDiscordOAuthBlockedUntil(_value) {
+  // Absichtlich kein Persistieren mehr. Discord OAuth-429 darf nicht dauerhaft in data/*.json
+  // hängen bleiben, sonst sieht ein normaler Logout/Login später fälschlich wie Rate-Limit aus.
   try {
-    saveJson(DISCORD_OAUTH_RATE_LIMIT_FILE, { blockedUntil: Number(value) || 0, savedAt: new Date().toISOString() });
+    if (fs.existsSync(DISCORD_OAUTH_RATE_LIMIT_FILE)) fs.rmSync(DISCORD_OAUTH_RATE_LIMIT_FILE, { force: true });
   } catch (error) {
-    console.warn('Discord OAuth Rate-Limit konnte nicht gespeichert werden:', error.message);
+    console.warn('Discord OAuth Rate-Limit-Datei konnte nicht bereinigt werden:', error.message);
   }
 }
 
@@ -103,7 +116,7 @@ function hasProcessedOAuthCode(code) {
 function discordOAuthRateLimitMessage() {
   const waitSeconds = Math.max(1, Math.ceil((discordOAuthBlockedUntil - Date.now()) / 1000));
   const waitText = waitSeconds >= 60 ? `${Math.ceil(waitSeconds / 60)} Minute(n)` : `${waitSeconds} Sekunde(n)`;
-  return `Discord blockiert OAuth-Logins gerade temporär wegen zu vieler Anfragen. Bitte warte ca. ${waitText} und versuche es dann erneut.`;
+  return `Discord Login wurde gerade kurz geschützt, damit kein Doppelklick/Callback-Refresh ausgelöst wird. Bitte warte ca. ${waitText} und versuche es dann erneut.`;
 }
 
 function discordOAuthSetRateLimit(response, bodyText = '') {
@@ -114,8 +127,8 @@ function discordOAuthSetRateLimit(response, bodyText = '') {
       retryAfter = Number(parsed.retry_after || parsed.retryAfter || 0);
     } catch {}
   }
-  if (!Number.isFinite(retryAfter) || retryAfter <= 0) retryAfter = 15 * 60;
-  retryAfter = Math.min(Math.max(retryAfter, 60), 60 * 60);
+  if (!Number.isFinite(retryAfter) || retryAfter <= 0) retryAfter = DISCORD_OAUTH_FALLBACK_RETRY_SECONDS;
+  retryAfter = Math.min(Math.max(retryAfter, 10), Math.max(10, DISCORD_OAUTH_MAX_LOCAL_BLOCK_SECONDS));
   discordOAuthBlockedUntil = Date.now() + retryAfter * 1000;
   saveDiscordOAuthBlockedUntil(discordOAuthBlockedUntil);
   return retryAfter;
@@ -434,8 +447,8 @@ app.get('/auth/discord/callback', async (req, res) => {
       if (tokenResponse.status === 429) {
         const retryAfter = discordOAuthSetRateLimit(tokenResponse, text);
         return res.status(429).send(
-          `Discord OAuth ist gerade rate-limited. Bitte warte ca. ${Math.ceil(retryAfter / 60)} Minute(n), ` +
-          'ohne den Login erneut zu spammen, und versuche es danach erneut.'
+          `Discord hat gerade OAuth-429 zurückgegeben. Ich blocke lokal nur kurz für ca. ${Math.ceil(retryAfter / 60)} Minute(n), ` +
+          'damit kein Doppelklick/Callback-Refresh gespammt wird. Danach kannst du es erneut versuchen.'
         );
       }
 
@@ -444,6 +457,10 @@ app.get('/auth/discord/callback', async (req, res) => {
         'Benutzte Redirect URL: ' + redirectUri
       );
     }
+
+    // Erfolgreicher Token-Tausch = kein lokaler OAuth-Block mehr nötig.
+    discordOAuthBlockedUntil = 0;
+    saveDiscordOAuthBlockedUntil(0);
 
     const token = await tokenResponse.json();
     const userResponse = await fetch('https://discord.com/api/users/@me', {
