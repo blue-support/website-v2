@@ -59,8 +59,10 @@ let lastHeartbeat = loadHeartbeatFromDisk();
 
 app.set('trust proxy', 1);
 app.use(cors());
-app.use(express.json({ limit: '128kb' }));
-app.use(express.urlencoded({ extended: false }));
+// Dashboard sync can contain role/channel lists from multiple guilds.
+// 128kb caused Render/Express to reject larger bots with HTTP 413.
+app.use(express.json({ limit: process.env.BLUE_JSON_LIMIT || '8mb' }));
+app.use(express.urlencoded({ extended: false, limit: process.env.BLUE_JSON_LIMIT || '8mb' }));
 app.use(session({
   secret: SESSION_SECRET,
   resave: false,
