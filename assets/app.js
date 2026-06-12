@@ -749,7 +749,7 @@ async function initDashboardPage() {
       const initial = (guild.name || '?').slice(0, 1).toUpperCase();
       const available = guild.available !== false;
       const reason = guild.unavailableReason || 'Nicht verfügbar - Administrator benötigt';
-      return `<button class="dashboard-server-card ${available ? '' : 'disabled'}" type="button" data-dashboard-guild="${escapeHtml(guild.id)}" ${available ? '' : 'disabled aria-disabled="true"'}><span class="server-icon">${icon ? `<img src="${escapeHtml(icon)}" alt="">` : escapeHtml(initial)}</span><span><strong>${escapeHtml(guild.name)}</strong><small>${available ? `${formatValue(guild.memberCount)} Mitglieder` : escapeHtml(reason)}</small></span></button>`;
+      return `<button class="dashboard-server-card ${available ? '' : 'disabled'}" type="button" data-dashboard-guild="${escapeHtml(guild.id)}" ${available ? '' : 'disabled aria-disabled="true"'}><span class="server-icon">${icon ? `<img src="${escapeHtml(icon)}" alt="">` : escapeHtml(initial)}</span><span class="server-card-copy"><strong>${escapeHtml(guild.name)}</strong><small>${available ? `${formatValue(guild.memberCount)} Mitglieder` : escapeHtml(reason)}</small></span><span class="server-card-badge ${available ? 'ok' : 'locked'}">${available ? 'Admin' : 'Locked'}</span></button>`;
     }).join('');
   }
 
@@ -763,6 +763,10 @@ async function initDashboardPage() {
     $('[data-dashboard-add-roles]').innerHTML = dashboardSelectOptions(roles, data.verification?.addRoleIds || data.verification?.role_ids || []);
     $('[data-dashboard-remove-roles]').innerHTML = dashboardSelectOptions(roles, data.verification?.removeRoleIds || data.verification?.remove_role_ids || []);
     $('[data-dashboard-channel-select]').innerHTML = dashboardSelectOptions(channels, [data.verification?.channelId || data.verification?.channel_id].filter(Boolean));
+    const logChannelSelect = $('[data-dashboard-log-channel-select]');
+    if (logChannelSelect) {
+      logChannelSelect.innerHTML = '<option value="">Kein Log-Kanal</option>' + dashboardSelectOptions(channels, [data.verification?.logChannelId || data.verification?.log_channel_id].filter(Boolean));
+    }
     if (data.verification?.mode) {
       const modeInput = form.querySelector(`[name="mode"][value="${data.verification.mode}"]`);
       if (modeInput) modeInput.checked = true;
@@ -872,6 +876,7 @@ async function initDashboardPage() {
       addRoleIds,
       removeRoleIds,
       channelId: formData.get('channelId'),
+      logChannelId: formData.get('logChannelId') || null,
       minAccountAgeEnabled: formData.get('minAccountAgeEnabled') === 'on',
       minAccountAgeDays: Number.parseInt(formData.get('minAccountAgeDays'), 10) || 0,
       embed: {
