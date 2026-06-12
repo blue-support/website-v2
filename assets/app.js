@@ -696,6 +696,203 @@ async function initTicketPage() {
   setInterval(() => loadTickets(true).catch(() => null), 5000);
 }
 
+
+function discordGuildIconUrl(guild) {
+  if (!guild) return '';
+  if (guild.icon && String(guild.icon).startsWith('http')) return guild.icon;
+  if (guild.icon && guild.id) return `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png?size=96`;
+  return '';
+}
+
+function dashboardSelectOptions(items, selected = []) {
+  const selectedSet = new Set((selected || []).map(String));
+  return (items || []).map((item) => `<option value="${escapeHtml(item.id)}" ${selectedSet.has(String(item.id)) ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('');
+}
+
+async function initDashboardPage() {
+  const root = $('[data-dashboard-page]');
+  if (!root) return;
+  const messageBox = $('[data-dashboard-message]');
+  const serverList = $('[data-dashboard-server-list]');
+  const empty = $('[data-dashboard-empty]');
+  const workspace = $('[data-dashboard-workspace]');
+  const form = $('[data-dashboard-verify-form]');
+  const soon = $('[data-dashboard-soon]');
+  let selectedGuildId = null;
+  let selectedGuildData = null;
+  let access = null;
+
+  function showDashboardMessage(text, type = 'info') {
+    if (!messageBox) return;
+    messageBox.hidden = false;
+    messageBox.className = `notice-card ${type}`;
+    messageBox.textContent = text;
+  }
+
+  function clearDashboardMessage() {
+    if (messageBox) messageBox.hidden = true;
+  }
+
+  function setWorkspaceVisible(visible) {
+    if (empty) empty.hidden = visible;
+    if (workspace) workspace.hidden = !visible;
+  }
+
+  function renderServers(guilds) {
+    if (!serverList) return;
+    if (!guilds.length) {
+      serverList.innerHTML = '<p class="muted">Keine gemeinsamen verwaltbaren Server gefunden. Prüfe, ob du mit Discord eingeloggt bist, Blue auf dem Server ist und du Server verwalten darfst.</p>';
+      return;
+    }
+    serverList.innerHTML = guilds.map((guild) => {
+      const icon = discordGuildIconUrl(guild);
+      const initial = (guild.name || '?').slice(0, 1).toUpperCase();
+      return `<button class="dashboard-server-card" type="button" data-dashboard-guild="${escapeHtml(guild.id)}"><span class="server-icon">${icon ? `<img src="${escapeHtml(icon)}" alt="">` : escapeHtml(initial)}</span><span><strong>${escapeHtml(guild.name)}</strong><small>${formatValue(guild.memberCount)} Mitglieder</small></span></button>`;
+    }).join('');
+  }
+
+  function renderGuildConfig(data) {
+    selectedGuildData = data.guild;
+    access = data.access || { checked: false, hasPremiumFooter: false };
+    $('[data-dashboard-server-name]').textContent = selectedGuildData.name || 'Server';
+    $('[data-dashboard-server-meta]').textContent = `${formatValue(selectedGuildData.memberCount)} Mitglieder · ${access.checked ? (access.canManage ? 'Zugriff bestätigt' : 'Zugriff wird geprüft') : 'Zugriff wird geprüft'}`;
+    const roles = (selectedGuildData.roles || []).filter((role) => !role.managed && !role.default).sort((a, b) => (b.position || 0) - (a.position || 0));
+    const channels = (selectedGuildData.channels || []).filter((channel) => ['text', 'news', 'forum'].includes(channel.type));
+    $('[data-dashboard-add-roles]').innerHTML = dashboardSelectOptions(roles, data.verification?.addRoleIds || data.verification?.role_ids || []);
+    $('[data-dashboard-remove-roles]').innerHTML = dashboardSelectOptions(roles, data.verification?.removeRoleIds || data.verification?.remove_role_ids || []);
+    $('[data-dashboard-channel-select]').innerHTML = dashboardSelectOptions(channels, [data.verification?.channelId || data.verification?.channel_id].filter(Boolean));
+    if (data.verification?.mode) {
+      const modeInput = form.querySelector(`[name="mode"][value="${data.verification.mode}"]`);
+      if (modeInput) modeInput.checked = true;
+    }
+    if (data.verification?.embed) {
+      for (const [key, value] of Object.entries(data.verification.embed)) {
+        const input = form.querySelector(`[name="${key}"]`);
+        if (input && value !== null && value !== undefined) input.value = value;
+      }
+    }
+    const footerInput = $('[data-dashboard-footer-input]');
+    const footerNote = $('[data-dashboard-footer-note]');
+    if (footerInput) {
+      footerInput.disabled = !access.hasPremiumFooter;
+      if (!access.hasPremiumFooter) footerInput.value = 'Powered by Blue ⚡';
+    }
+    if (footerNote) footerNote.textContent = access.hasPremiumFooter ? 'Blue Premium erkannt: Du darfst den Footer bearbeiten.' : 'Ohne Blue Premium auf dem Mainserver bleibt der Footer fest auf Powered by Blue ⚡.';
+    updateVerifyPreview();
+  }
+
+  async function loadDashboard() {
+    const authResponse = await fetch('/api/auth/me', { cache: 'no-store' });
+    const auth = await authResponse.json();
+    if (!auth.loggedIn) {
+      setWorkspaceVisible(false);
+      if (serverList) serverList.innerHTML = '<p class="muted">Bitte oben rechts mit Discord einloggen.</p>';
+      showDashboardMessage('Discord Login erforderlich, um dein Dashboard zu öffnen.', 'warn');
+      return;
+    }
+    const response = await fetch('/api/dashboard/me', { cache: 'no-store' });
+    const data = await response.json();
+    renderServers(data.guilds || []);
+    clearDashboardMessage();
+    $$('[data-dashboard-guild]', serverList).forEach((button) => {
+      button.addEventListener('click', async () => {
+        selectedGuildId = button.dataset.dashboardGuild;
+        $$('.dashboard-server-card', serverList).forEach((node) => node.classList.toggle('active', node === button));
+        setWorkspaceVisible(true);
+        await loadGuild(selectedGuildId);
+      });
+    });
+  }
+
+  async function loadGuild(guildId) {
+    showDashboardMessage('Serverdaten werden geladen...', 'info');
+    const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(guildId)}`, { cache: 'no-store' });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      showDashboardMessage(data.error || 'Server konnte nicht geladen werden.', 'error');
+      return;
+    }
+    clearDashboardMessage();
+    renderGuildConfig(data);
+  }
+
+  function updateVerifyPreview() {
+    if (!form) return;
+    const title = form.querySelector('[name="title"]')?.value || '✅ Verifizierung erforderlich';
+    const description = form.querySelector('[name="description"]')?.value || '';
+    const color = form.querySelector('[name="color"]')?.value || '#22c55e';
+    const image = form.querySelector('[name="image"]')?.value || form.querySelector('[name="thumbnail"]')?.value || '';
+    const footer = form.querySelector('[name="footer"]')?.value || 'Powered by Blue ⚡';
+    $('[data-verify-preview-title]').textContent = title;
+    $('[data-verify-preview-description]').textContent = description;
+    $('[data-verify-preview-footer]').textContent = footer;
+    const media = $('[data-verify-preview-media]');
+    if (media) {
+      media.style.borderColor = color;
+      media.innerHTML = image ? `<img src="${escapeHtml(image)}" alt="Embed Vorschau">` : 'Embed Image / Thumbnail';
+    }
+  }
+
+  form?.addEventListener('input', updateVerifyPreview);
+  $('[data-dashboard-refresh]')?.addEventListener('click', async () => {
+    if (selectedGuildId) await loadGuild(selectedGuildId);
+  });
+
+  $$('[data-dashboard-section]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const section = button.dataset.dashboardSection;
+      $$('[data-dashboard-section]').forEach((node) => node.classList.toggle('active', node === button));
+      if (section === 'verification') {
+        if (form) form.hidden = false;
+        if (soon) soon.hidden = true;
+      } else {
+        if (form) form.hidden = true;
+        if (soon) {
+          soon.hidden = false;
+          soon.querySelector('h3').textContent = `${button.querySelector('strong')?.textContent || 'Dieses System'} · Bald...`;
+        }
+      }
+    });
+  });
+
+  form?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!selectedGuildId) return showDashboardMessage('Bitte wähle zuerst einen Server.', 'warn');
+    const formData = new FormData(form);
+    const addRoleIds = Array.from(form.querySelector('[name="addRoleIds"]').selectedOptions).map((option) => option.value);
+    const removeRoleIds = Array.from(form.querySelector('[name="removeRoleIds"]').selectedOptions).map((option) => option.value);
+    const payload = {
+      mode: formData.get('mode'),
+      addRoleIds,
+      removeRoleIds,
+      channelId: formData.get('channelId'),
+      embed: {
+        title: formData.get('title'),
+        description: formData.get('description'),
+        thumbnail: formData.get('thumbnail'),
+        image: formData.get('image'),
+        color: formData.get('color'),
+        footer: formData.get('footer')
+      }
+    };
+    const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/verification`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.ok) return showDashboardMessage(result.error || 'Verify Panel konnte nicht gespeichert werden.', 'error');
+    showDashboardMessage('Verify Panel wird vom Bot gesendet. Das kann ein paar Sekunden dauern.', 'success');
+    setTimeout(() => selectedGuildId && loadGuild(selectedGuildId).catch(() => null), 2500);
+  });
+
+  await loadDashboard();
+  setInterval(() => {
+    if (selectedGuildId) loadGuild(selectedGuildId).catch(() => null);
+  }, 30000);
+}
+
 initGlobalAuth();
 initUnbanPage();
 initTicketPage();
+initDashboardPage();
