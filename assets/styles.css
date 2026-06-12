@@ -1537,3 +1537,222 @@ img,video,canvas{max-width:100%}
     max-height: 300px !important;
   }
 }
+
+/* Dashboard stacked layout fix: server area first, full-width builders below */
+.dashboard-shell.dashboard-shell-pro {
+  width: min(1580px, calc(100% - 40px));
+  max-width: 1580px;
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: 24px !important;
+  align-items: stretch !important;
+}
+
+.dashboard-shell-pro .dashboard-sidebar,
+.dashboard-shell-pro .dashboard-main {
+  width: 100%;
+}
+
+.dashboard-shell-pro .dashboard-sidebar {
+  position: relative;
+  overflow: hidden;
+}
+
+.dashboard-shell-pro .dashboard-sidebar::after {
+  content: "";
+  position: absolute;
+  inset: auto 18px 0 18px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(34, 211, 238, .45), transparent);
+  pointer-events: none;
+}
+
+.dashboard-shell-pro .dashboard-server-list {
+  grid-template-columns: repeat(auto-fit, minmax(255px, 1fr));
+  max-height: 330px;
+  overflow: auto;
+  padding: 2px 4px 8px 2px;
+}
+
+.dashboard-shell-pro .dashboard-server-card {
+  min-height: 76px;
+}
+
+.dashboard-shell-pro .dashboard-main {
+  padding: 28px !important;
+}
+
+.dashboard-shell-pro .dashboard-workspace {
+  display: grid;
+  gap: 22px;
+}
+
+.dashboard-shell-pro .dashboard-departments-pro {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)) !important;
+  gap: 12px;
+  overflow: visible;
+}
+
+/* Messages: list on the left, editor + preview with enough space on wide screens */
+.dashboard-shell-pro .messages-builder-grid {
+  display: grid !important;
+  grid-template-columns: minmax(260px, 340px) minmax(420px, 1fr) minmax(420px, .95fr) !important;
+  gap: 26px !important;
+  align-items: start;
+}
+
+.dashboard-shell-pro .messages-list-card {
+  grid-column: 1;
+  grid-row: 1;
+  position: sticky;
+  top: 96px;
+  max-height: calc(100vh - 130px);
+}
+
+.dashboard-shell-pro .messages-editor-card {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.dashboard-shell-pro .dashboard-messages-form .discord-embed-preview-card {
+  grid-column: 3 !important;
+  grid-row: 1;
+  position: sticky;
+  top: 96px;
+}
+
+.dashboard-shell-pro .discord-embed-preview {
+  width: 100% !important;
+}
+
+.dashboard-shell-pro .messages-editor-card textarea[name="messageDescription"] {
+  min-height: 260px;
+}
+
+/* Verification: controls above, large Discord preview underneath across the full row */
+.dashboard-shell-pro .verify-form-grid-pro {
+  display: grid !important;
+  grid-template-columns: repeat(12, minmax(0, 1fr)) !important;
+  gap: 24px !important;
+  align-items: start;
+}
+
+.dashboard-shell-pro .verify-form-grid-pro .mode-section {
+  grid-column: span 5 !important;
+}
+
+.dashboard-shell-pro .verify-form-grid-pro .channel-section {
+  grid-column: span 4 !important;
+}
+
+.dashboard-shell-pro .verify-form-grid-pro .security-section {
+  grid-column: span 3 !important;
+}
+
+.dashboard-shell-pro .verify-form-grid-pro .roles-section {
+  grid-column: span 7 !important;
+}
+
+.dashboard-shell-pro .verify-form-grid-pro .embed-section {
+  grid-column: span 5 !important;
+}
+
+.dashboard-shell-pro .verify-form-grid-pro .verify-discord-preview-card,
+.dashboard-shell-pro .verify-form-grid-pro .verify-preview-card-pro {
+  grid-column: 1 / -1 !important;
+  grid-row: auto !important;
+  position: static !important;
+}
+
+.dashboard-shell-pro .verify-discord-message-preview .discord-message-body,
+.dashboard-shell-pro .dashboard-messages-form .discord-message-body {
+  max-width: 980px;
+}
+
+.dashboard-shell-pro .verify-discord-message-preview .discord-embed-preview,
+.dashboard-shell-pro .dashboard-messages-form .discord-embed-preview {
+  max-width: 920px !important;
+}
+
+.dashboard-shell-pro .verify-discord-preview-card .discord-message-preview,
+.dashboard-shell-pro .dashboard-messages-form .discord-message-preview {
+  min-height: 190px;
+}
+
+@media (max-width: 1380px) {
+  .dashboard-shell.dashboard-shell-pro {
+    width: min(1320px, calc(100% - 34px));
+  }
+
+  .dashboard-shell-pro .messages-builder-grid {
+    grid-template-columns: minmax(250px, 320px) minmax(0, 1fr) !important;
+  }
+
+  .dashboard-shell-pro .dashboard-messages-form .discord-embed-preview-card {
+    grid-column: 2 !important;
+    grid-row: 2;
+    position: static;
+  }
+}
+
+@media (max-width: 980px) {
+  .dashboard-shell.dashboard-shell-pro {
+    width: min(100% - 24px, 100%);
+  }
+
+  .dashboard-shell-pro .dashboard-server-list {
+    grid-template-columns: 1fr;
+    max-height: 430px;
+  }
+
+  .dashboard-shell-pro .messages-builder-grid,
+  .dashboard-shell-pro .verify-form-grid-pro {
+    grid-template-columns: 1fr !important;
+  }
+
+  .dashboard-shell-pro .messages-list-card,
+  .dashboard-shell-pro .messages-editor-card,
+  .dashboard-shell-pro .dashboard-messages-form .discord-embed-preview-card,
+  .dashboard-shell-pro .verify-form-grid-pro .mode-section,
+  .dashboard-shell-pro .verify-form-grid-pro .channel-section,
+  .dashboard-shell-pro .verify-form-grid-pro .security-section,
+  .dashboard-shell-pro .verify-form-grid-pro .roles-section,
+  .dashboard-shell-pro .verify-form-grid-pro .embed-section,
+  .dashboard-shell-pro .verify-form-grid-pro .verify-discord-preview-card {
+    grid-column: auto !important;
+    grid-row: auto !important;
+    position: static !important;
+    max-height: none;
+  }
+
+  .dashboard-shell-pro .dashboard-departments-pro {
+    display: flex !important;
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+
+  .dashboard-shell-pro .dashboard-departments-pro .dashboard-dept {
+    min-width: 150px;
+  }
+}
+
+@media (max-width: 700px) {
+  .dashboard-shell.dashboard-shell-pro {
+    width: min(100% - 16px, 100%);
+    gap: 16px !important;
+  }
+
+  .dashboard-shell-pro .dashboard-main,
+  .dashboard-shell-pro .dashboard-sidebar {
+    padding: 16px !important;
+  }
+
+  .dashboard-shell-pro .verify-toolbar {
+    align-items: stretch;
+  }
+
+  .dashboard-shell-pro .discord-message-preview {
+    min-height: auto !important;
+  }
+}
