@@ -782,9 +782,18 @@ function dashboardUserGuilds(req) {
 function dashboardCommonGuild(req, guildId) {
   const botGuild = loadDashboardGuilds().guilds[String(guildId)];
   const userGuild = dashboardUserGuilds(req).find((guild) => String(guild.id) === String(guildId));
-  if (!botGuild || !userGuild) return null;
-  if (!dashboardHasAdministratorPermission(userGuild)) return null;
-  return { botGuild, userGuild };
+  if (!botGuild) return null;
+
+  // Wichtig: Wegen Remember-Login / Discord OAuth Cache kann die OAuth-Guildliste
+  // zeitweise veraltet sein. Deshalb akzeptieren wir zusätzlich die Bot-bestätigte
+  // Access-Cache-Prüfung als Quelle, wenn der Bot den User auf dem Server als
+  // Administrator/Owner bestätigt hat.
+  const access = dashboardAccessFor(req.session.discordUser?.id, guildId);
+  const hasOAuthAdmin = userGuild && dashboardHasAdministratorPermission(userGuild);
+  const hasBotConfirmedAdmin = Boolean(access.checked && access.canManage);
+
+  if (!hasOAuthAdmin && !hasBotConfirmedAdmin) return null;
+  return { botGuild, userGuild: userGuild || null };
 }
 
 function queueDashboardAccess(userId, guildId) {
@@ -796,33 +805,76 @@ function queueDashboardAccess(userId, guildId) {
 
 function dashboardAccessFor(userId, guildId) {
   const cache = loadDashboardAccess();
-  return cache.users?.[String(userId)]?.[String(guildId)] || { checked: false, canManage: false, hasPremiumFooter: false };
+  return cache.users?.[String(userId)]?.[String(guildId)] || {
+    checked: false,
+    canManage: false,
+    hasPremiumFooter: false,
+    memberFound: null,
+    member: null,
+  };
 }
 
 function dashboardPublicGuildList(req) {
+  const userId = String(req.session.discordUser?.id || '');
   const botGuilds = loadDashboardGuilds().guilds;
-  return dashboardUserGuilds(req)
-    .filter((guild) => botGuilds[String(guild.id)])
-    .map((guild) => {
-      const botGuild = botGuilds[String(guild.id)];
-      const hasAdmin = dashboardHasAdministratorPermission(guild);
-      queueDashboardAccess(req.session.discordUser.id, guild.id);
-      return {
-        id: String(guild.id),
-        name: botGuild.name || guild.name,
-        icon: botGuild.icon || guild.icon || null,
-        memberCount: botGuild.memberCount || 0,
-        botAvatar: botGuild.botAvatar || null,
-        owner: guild.owner,
-        available: hasAdmin,
-        unavailableReason: hasAdmin ? null : 'Nicht verfügbar - Administrator benötigt',
-        access: dashboardAccessFor(req.session.discordUser.id, guild.id)
-      };
+  const userGuilds = dashboardUserGuilds(req);
+  const userGuildMap = new Map(userGuilds.map((guild) => [String(guild.id), guild]));
+  const guildEntries = Object.entries(botGuilds || {});
+
+  // Früher wurden nur OAuth-Guilds geprüft. Wenn Discord/Remember-Session eine alte
+  // oder unvollständige Guildliste hatte, fehlten neue Server. Jetzt fragt die Website
+  // den Bot für ALLE Bot-Server: "Ist dieser User dort Mitglied/Admin?"
+  for (const [guildId] of guildEntries) {
+    if (userId && guildId) queueDashboardAccess(userId, guildId);
+  }
+
+  let pendingChecks = 0;
+  const guilds = [];
+
+  for (const [guildId, botGuild] of guildEntries) {
+    const userGuild = userGuildMap.get(String(guildId));
+    const access = dashboardAccessFor(userId, guildId);
+    const accessChecked = Boolean(access.checked);
+    const botConfirmedMember = Boolean(access.memberFound || access.member);
+    const isMember = Boolean(userGuild || botConfirmedMember);
+
+    // Ohne OAuth-Treffer und ohne Bot-Bestätigung zeigen wir den Server nicht, damit
+    // keine fremden Bot-Server geleakt werden. Der Bot prüft ihn aber im Hintergrund.
+    if (!isMember) {
+      if (!accessChecked) pendingChecks += 1;
+      continue;
+    }
+
+    const hasAdmin = userGuild ? dashboardHasAdministratorPermission(userGuild) : Boolean(access.canManage);
+    const available = Boolean(hasAdmin || (accessChecked && access.canManage));
+
+    guilds.push({
+      id: String(guildId),
+      name: botGuild.name || userGuild?.name || 'Server',
+      icon: botGuild.icon || userGuild?.icon || null,
+      memberCount: botGuild.memberCount || 0,
+      botAvatar: botGuild.botAvatar || null,
+      owner: Boolean(userGuild?.owner || (accessChecked && access.canManage && String(botGuild.ownerId || '') === userId)),
+      available,
+      unavailableReason: available ? null : 'Nicht verfügbar - Administrator benötigt',
+      access,
     });
+  }
+
+  guilds.sort((a, b) => Number(b.available) - Number(a.available) || String(a.name).localeCompare(String(b.name)));
+  return { guilds, pendingChecks, totalBotGuilds: guildEntries.length };
 }
 
 app.get('/api/dashboard/me', requireUser, (req, res) => {
-  res.json({ ok: true, user: req.session.discordUser, guilds: dashboardPublicGuildList(req) });
+  const result = dashboardPublicGuildList(req);
+  res.json({
+    ok: true,
+    user: req.session.discordUser,
+    guilds: result.guilds,
+    pendingChecks: result.pendingChecks,
+    checkingServers: result.pendingChecks > 0,
+    totalBotGuilds: result.totalBotGuilds,
+  });
 });
 
 app.get('/api/dashboard/guild/:guildId', requireUser, (req, res) => {
@@ -982,6 +1034,7 @@ app.post('/api/dashboard/bot/access-cache', requireDashboardBot, (req, res) => {
     checked: true,
     canManage: Boolean(req.body.canManage),
     hasPremiumFooter: Boolean(req.body.hasPremiumFooter),
+    memberFound: Boolean(req.body.memberFound || req.body.member),
     member: req.body.member || null,
     updatedAt: new Date().toISOString()
   };
