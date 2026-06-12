@@ -727,6 +727,8 @@ async function initDashboardPage() {
   let selectedRemoveRoleIds = new Set();
   let dashboardDirty = false;
   let dashboardChannels = [];
+  let dashboardServerAutoRefreshes = 0;
+  let dashboardServerAutoRefreshTimer = null;
   let globalchatDirty = false;
 
   function showDashboardMessage(text, type = 'info') {
@@ -748,7 +750,7 @@ async function initDashboardPage() {
   function renderServers(guilds) {
     if (!serverList) return;
     if (!guilds.length) {
-      serverList.innerHTML = '<p class="muted">Keine gemeinsamen Server gefunden. Prüfe, ob du mit Discord eingeloggt bist und Blue auf dem Server ist.</p>';
+      serverList.innerHTML = '<p class="muted">Keine gemeinsamen Server gefunden. Prüfe, ob du mit Discord eingeloggt bist und Blue auf dem Server ist. Falls der Server neu ist, warte kurz, bis der Bot ihn bestätigt.</p>';
       return;
     }
     serverList.innerHTML = guilds.map((guild) => {
@@ -902,7 +904,14 @@ async function initDashboardPage() {
     const response = await fetch('/api/dashboard/me', { cache: 'no-store' });
     const data = await response.json();
     renderServers(data.guilds || []);
-    clearDashboardMessage();
+    if (data.checkingServers && dashboardServerAutoRefreshes < 4) {
+      showDashboardMessage('Neue Server werden vom Bot geprüft. Die Liste aktualisiert sich gleich automatisch...', 'info');
+      clearTimeout(dashboardServerAutoRefreshTimer);
+      dashboardServerAutoRefreshes += 1;
+      dashboardServerAutoRefreshTimer = setTimeout(() => loadDashboard(), 4500);
+    } else {
+      clearDashboardMessage();
+    }
     $$('[data-dashboard-guild]', serverList).forEach((button) => {
       button.addEventListener('click', async () => {
         selectedGuildId = button.dataset.dashboardGuild;
