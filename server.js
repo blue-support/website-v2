@@ -13,15 +13,21 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Runtime-Daten (Dashboard-Einstellungen, Tickets, OAuth-Session-Cache, Uploads) gehören nicht in den Build-Ordner.
+// Auf Render am besten einen Persistent Disk mounten und BLUE_DATA_DIR=/var/data setzen.
+// Fallback bleibt ./data, damit lokale Entwicklung und bestehende Setups weiter funktionieren.
+const DATA_DIR = path.resolve(process.env.BLUE_DATA_DIR || path.join(__dirname, 'data'));
+fs.mkdirSync(DATA_DIR, { recursive: true });
+
 const HEARTBEAT_SECRET = process.env.BOT_HEARTBEAT_SECRET || process.env.HEARTBEAT_SECRET || '';
 const HEARTBEAT_TIMEOUT_SECONDS = Number(process.env.HEARTBEAT_TIMEOUT_SECONDS || 120);
-const HEARTBEAT_FILE = path.join(__dirname, 'data', 'heartbeat-state.json');
+const HEARTBEAT_FILE = path.join(DATA_DIR, 'heartbeat-state.json');
 
 const SESSION_SECRET = process.env.SESSION_SECRET || HEARTBEAT_SECRET || crypto.randomBytes(32).toString('hex');
 const DISCORD_CLIENT_ID = String(process.env.DISCORD_CLIENT_ID || process.env.CLIENT_ID || '1321889022380871681').trim();
 const DISCORD_CLIENT_SECRET = String(process.env.DISCORD_CLIENT_SECRET || '').trim();
 const PUBLIC_SITE_URL = String(process.env.PUBLIC_SITE_URL || process.env.WEBSITE_PUBLIC_URL || '').trim().replace(/\/$/, '');
-const DISCORD_OAUTH_RATE_LIMIT_FILE = path.join(__dirname, 'data', 'discord-oauth-rate-limit.json');
+const DISCORD_OAUTH_RATE_LIMIT_FILE = path.join(DATA_DIR, 'discord-oauth-rate-limit.json');
 const DISCORD_OAUTH_MIN_RETRY_SECONDS = Number(process.env.DISCORD_OAUTH_MIN_RETRY_SECONDS || 5);
 // Nur kurzer lokaler Schutz gegen Doppelklicks/Callback-Refresh.
 // Keine lange gespeicherte Sperre mehr, damit Logout -> späterer Login nicht fälschlich 30-60 Minuten blockiert.
@@ -29,25 +35,25 @@ const DISCORD_OAUTH_FALLBACK_RETRY_SECONDS = Number(process.env.DISCORD_OAUTH_FA
 const DISCORD_OAUTH_MAX_LOCAL_BLOCK_SECONDS = Number(process.env.DISCORD_OAUTH_MAX_LOCAL_BLOCK_SECONDS || 10);
 const DISCORD_RELOGIN_CACHE_MS = Number(process.env.DISCORD_RELOGIN_CACHE_MS || (1000 * 60 * 60 * 24 * 7));
 const UNBAN_API_SECRET = process.env.UNBAN_API_SECRET || HEARTBEAT_SECRET || '';
-const UNBAN_APPLICATIONS_FILE = path.join(__dirname, 'data', 'unban-applications.json');
-const UNBAN_BAN_CACHE_FILE = path.join(__dirname, 'data', 'unban-ban-cache.json');
-const UNBAN_LOOKUP_FILE = path.join(__dirname, 'data', 'unban-lookup-requests.json');
+const UNBAN_APPLICATIONS_FILE = path.join(DATA_DIR, 'unban-applications.json');
+const UNBAN_BAN_CACHE_FILE = path.join(DATA_DIR, 'unban-ban-cache.json');
+const UNBAN_LOOKUP_FILE = path.join(DATA_DIR, 'unban-lookup-requests.json');
 
 const TICKET_API_SECRET = process.env.TICKET_API_SECRET || UNBAN_API_SECRET || HEARTBEAT_SECRET || '';
-const TICKETS_FILE = path.join(__dirname, 'data', 'tickets.json');
-const TICKET_ELIGIBILITY_FILE = path.join(__dirname, 'data', 'ticket-eligibility.json');
-const TICKET_ELIGIBILITY_LOOKUP_FILE = path.join(__dirname, 'data', 'ticket-eligibility-requests.json');
+const TICKETS_FILE = path.join(DATA_DIR, 'tickets.json');
+const TICKET_ELIGIBILITY_FILE = path.join(DATA_DIR, 'ticket-eligibility.json');
+const TICKET_ELIGIBILITY_LOOKUP_FILE = path.join(DATA_DIR, 'ticket-eligibility-requests.json');
 const TICKET_DELETE_AFTER_DAYS = Number(process.env.TICKET_DELETE_AFTER_DAYS || 30);
-const TICKET_UPLOAD_DIR = path.join(__dirname, 'data', 'ticket-uploads');
+const TICKET_UPLOAD_DIR = path.join(DATA_DIR, 'ticket-uploads');
 
 const DASHBOARD_API_SECRET = process.env.DASHBOARD_API_SECRET || TICKET_API_SECRET || UNBAN_API_SECRET || HEARTBEAT_SECRET || '';
-const DASHBOARD_GUILDS_FILE = path.join(__dirname, 'data', 'dashboard-guilds.json');
-const DASHBOARD_ACCESS_FILE = path.join(__dirname, 'data', 'dashboard-access-cache.json');
-const DASHBOARD_ACCESS_LOOKUP_FILE = path.join(__dirname, 'data', 'dashboard-access-requests.json');
-const DASHBOARD_VERIFY_CONFIG_FILE = path.join(__dirname, 'data', 'dashboard-verify-configs.json');
-const DASHBOARD_VERIFY_ACTION_FILE = path.join(__dirname, 'data', 'dashboard-verify-actions.json');
-const DASHBOARD_GLOBALCHAT_CONFIG_FILE = path.join(__dirname, 'data', 'dashboard-globalchat-configs.json');
-const DASHBOARD_GLOBALCHAT_ACTION_FILE = path.join(__dirname, 'data', 'dashboard-globalchat-actions.json');
+const DASHBOARD_GUILDS_FILE = path.join(DATA_DIR, 'dashboard-guilds.json');
+const DASHBOARD_ACCESS_FILE = path.join(DATA_DIR, 'dashboard-access-cache.json');
+const DASHBOARD_ACCESS_LOOKUP_FILE = path.join(DATA_DIR, 'dashboard-access-requests.json');
+const DASHBOARD_VERIFY_CONFIG_FILE = path.join(DATA_DIR, 'dashboard-verify-configs.json');
+const DASHBOARD_VERIFY_ACTION_FILE = path.join(DATA_DIR, 'dashboard-verify-actions.json');
+const DASHBOARD_GLOBALCHAT_CONFIG_FILE = path.join(DATA_DIR, 'dashboard-globalchat-configs.json');
+const DASHBOARD_GLOBALCHAT_ACTION_FILE = path.join(DATA_DIR, 'dashboard-globalchat-actions.json');
 fs.mkdirSync(TICKET_UPLOAD_DIR, { recursive: true });
 
 const ticketUploadStorage = multer.diskStorage({
@@ -1043,6 +1049,66 @@ app.post('/api/dashboard/bot/verify-action-result', requireDashboardBot, (req, r
     }
   }
   res.json({ ok: true });
+});
+
+
+app.post('/api/dashboard/bot/saved-configs', requireDashboardBot, (req, res) => {
+  const verifyConfigs = req.body?.verifyConfigs && typeof req.body.verifyConfigs === 'object' ? req.body.verifyConfigs : {};
+  const globalchatConfigs = req.body?.globalchatConfigs && typeof req.body.globalchatConfigs === 'object' ? req.body.globalchatConfigs : {};
+
+  let verifyCount = 0;
+  let globalchatCount = 0;
+
+  if (Object.keys(verifyConfigs).length) {
+    const data = loadDashboardVerifyConfigs();
+    for (const [guildIdRaw, configRaw] of Object.entries(verifyConfigs)) {
+      const guildId = String(guildIdRaw || '').replace(/\D/g, '');
+      if (!guildId || !configRaw || typeof configRaw !== 'object') continue;
+      data.configs[guildId] = {
+        ...(data.configs[guildId] || {}),
+        ...configRaw,
+        guildId,
+        restoredFromBot: true,
+        status: configRaw.status || data.configs[guildId]?.status || 'done',
+        updatedAt: configRaw.updatedAt || data.configs[guildId]?.updatedAt || new Date().toISOString()
+      };
+      verifyCount += 1;
+    }
+    saveDashboardVerifyConfigs(data);
+  }
+
+  if (Object.keys(globalchatConfigs).length) {
+    const data = loadDashboardGlobalchatConfigs();
+    for (const [guildIdRaw, configRaw] of Object.entries(globalchatConfigs)) {
+      const guildId = String(guildIdRaw || '').replace(/\D/g, '');
+      if (!guildId || !configRaw || typeof configRaw !== 'object') continue;
+      if (configRaw.enabled === false) {
+        data.configs[guildId] = {
+          ...(data.configs[guildId] || {}),
+          guildId,
+          enabled: false,
+          channelId: null,
+          restoredFromBot: true,
+          status: configRaw.status || 'done',
+          updatedAt: configRaw.updatedAt || new Date().toISOString()
+        };
+      } else {
+        data.configs[guildId] = {
+          ...(data.configs[guildId] || {}),
+          ...configRaw,
+          guildId,
+          enabled: true,
+          restoredFromBot: true,
+          status: configRaw.status || data.configs[guildId]?.status || 'done',
+          updatedAt: configRaw.updatedAt || data.configs[guildId]?.updatedAt || new Date().toISOString()
+        };
+      }
+      globalchatCount += 1;
+    }
+    saveDashboardGlobalchatConfigs(data);
+  }
+
+  res.json({ ok: true, verifyCount, globalchatCount });
 });
 
 function loadApplications() {
