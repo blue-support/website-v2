@@ -426,15 +426,22 @@ function dashboardSanitizeText(value, maxLength = 1000) {
   return String(value || '').replace(/\r/g, '').trim().slice(0, maxLength);
 }
 
-function dashboardHasManagePermission(guild) {
+function dashboardHasAdministratorPermission(guild) {
   if (!guild) return false;
   if (guild.owner) return true;
   try {
     const perms = BigInt(guild.permissions || '0');
-    return Boolean((perms & 8n) === 8n || (perms & 32n) === 32n);
+    // Discord Permission Bit 8 = Administrator.
+    // Manage Server reicht bewusst nicht aus, weil das Dashboard Server-Systeme verändert.
+    return Boolean((perms & 8n) === 8n);
   } catch {
     return false;
   }
+}
+
+// Backwards-compatible alias for older route code.
+function dashboardHasManagePermission(guild) {
+  return dashboardHasAdministratorPermission(guild);
 }
 
 function dashboardUserGuilds(req) {
@@ -445,7 +452,7 @@ function dashboardCommonGuild(req, guildId) {
   const botGuild = loadDashboardGuilds().guilds[String(guildId)];
   const userGuild = dashboardUserGuilds(req).find((guild) => String(guild.id) === String(guildId));
   if (!botGuild || !userGuild) return null;
-  if (!dashboardHasManagePermission(userGuild)) return null;
+  if (!dashboardHasAdministratorPermission(userGuild)) return null;
   return { botGuild, userGuild };
 }
 
@@ -464,9 +471,10 @@ function dashboardAccessFor(userId, guildId) {
 function dashboardPublicGuildList(req) {
   const botGuilds = loadDashboardGuilds().guilds;
   return dashboardUserGuilds(req)
-    .filter((guild) => botGuilds[String(guild.id)] && dashboardHasManagePermission(guild))
+    .filter((guild) => botGuilds[String(guild.id)])
     .map((guild) => {
       const botGuild = botGuilds[String(guild.id)];
+      const hasAdmin = dashboardHasAdministratorPermission(guild);
       queueDashboardAccess(req.session.discordUser.id, guild.id);
       return {
         id: String(guild.id),
@@ -475,6 +483,8 @@ function dashboardPublicGuildList(req) {
         memberCount: botGuild.memberCount || 0,
         botAvatar: botGuild.botAvatar || null,
         owner: guild.owner,
+        available: hasAdmin,
+        unavailableReason: hasAdmin ? null : 'Nicht verfügbar - Administrator benötigt',
         access: dashboardAccessFor(req.session.discordUser.id, guild.id)
       };
     });
@@ -487,7 +497,7 @@ app.get('/api/dashboard/me', requireUser, (req, res) => {
 app.get('/api/dashboard/guild/:guildId', requireUser, (req, res) => {
   const guildId = String(req.params.guildId || '').replace(/\D/g, '');
   const common = dashboardCommonGuild(req, guildId);
-  if (!common) return res.status(403).json({ ok: false, error: 'Du kannst diesen Server nicht über das Dashboard verwalten oder Blue ist dort nicht aktiv.' });
+  if (!common) return res.status(403).json({ ok: false, error: 'Nicht verfügbar - Administrator benötigt. Du brauchst Administratorrechte auf diesem Server.' });
   queueDashboardAccess(req.session.discordUser.id, guildId);
   const configs = loadDashboardVerifyConfigs().configs;
   res.json({
@@ -501,7 +511,7 @@ app.get('/api/dashboard/guild/:guildId', requireUser, (req, res) => {
 app.post('/api/dashboard/guild/:guildId/verification', requireUser, (req, res) => {
   const guildId = String(req.params.guildId || '').replace(/\D/g, '');
   const common = dashboardCommonGuild(req, guildId);
-  if (!common) return res.status(403).json({ ok: false, error: 'Du kannst diesen Server nicht verwalten.' });
+  if (!common) return res.status(403).json({ ok: false, error: 'Nicht verfügbar - Administrator benötigt. Du brauchst Administratorrechte auf diesem Server.' });
 
   const access = dashboardAccessFor(req.session.discordUser.id, guildId);
   if (access.checked && access.canManage === false) return res.status(403).json({ ok: false, error: 'Der Bot konnte deine Verwaltungsrechte auf diesem Server nicht bestätigen.' });
@@ -527,12 +537,17 @@ app.post('/api/dashboard/guild/:guildId/verification', requireUser, (req, res) =
     footer: canEditFooter ? (dashboardSanitizeText(body.embed?.footer, 120) || 'Powered by Blue ⚡') : 'Powered by Blue ⚡'
   };
 
+  const minAccountAgeEnabled = Boolean(body.minAccountAgeEnabled);
+  const minAccountAgeDays = Math.max(0, Math.min(3650, Number.parseInt(body.minAccountAgeDays, 10) || 0));
+
   const config = {
     guildId,
     mode,
     addRoleIds,
     removeRoleIds,
     channelId,
+    minAccountAgeEnabled,
+    minAccountAgeDays,
     embed,
     canEditFooter,
     updatedBy: req.session.discordUser,
