@@ -32,6 +32,13 @@ const TICKET_ELIGIBILITY_FILE = path.join(__dirname, 'data', 'ticket-eligibility
 const TICKET_ELIGIBILITY_LOOKUP_FILE = path.join(__dirname, 'data', 'ticket-eligibility-requests.json');
 const TICKET_DELETE_AFTER_DAYS = Number(process.env.TICKET_DELETE_AFTER_DAYS || 30);
 const TICKET_UPLOAD_DIR = path.join(__dirname, 'data', 'ticket-uploads');
+
+const DASHBOARD_API_SECRET = process.env.DASHBOARD_API_SECRET || TICKET_API_SECRET || UNBAN_API_SECRET || HEARTBEAT_SECRET || '';
+const DASHBOARD_GUILDS_FILE = path.join(__dirname, 'data', 'dashboard-guilds.json');
+const DASHBOARD_ACCESS_FILE = path.join(__dirname, 'data', 'dashboard-access-cache.json');
+const DASHBOARD_ACCESS_LOOKUP_FILE = path.join(__dirname, 'data', 'dashboard-access-requests.json');
+const DASHBOARD_VERIFY_CONFIG_FILE = path.join(__dirname, 'data', 'dashboard-verify-configs.json');
+const DASHBOARD_VERIFY_ACTION_FILE = path.join(__dirname, 'data', 'dashboard-verify-actions.json');
 fs.mkdirSync(TICKET_UPLOAD_DIR, { recursive: true });
 
 const ticketUploadStorage = multer.diskStorage({
@@ -254,6 +261,12 @@ function requireTicketBot(req, res, next) {
   return next();
 }
 
+function requireDashboardBot(req, res, next) {
+  if (!DASHBOARD_API_SECRET) return res.status(500).json({ ok: false, error: 'DASHBOARD_API_SECRET, TICKET_API_SECRET oder BOT_HEARTBEAT_SECRET fehlt im Website-Service.' });
+  if (readSecret(req, 'x-blue-dashboard-secret') !== DASHBOARD_API_SECRET) return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  return next();
+}
+
 function cleanReturnPath(value) {
   const raw = String(value || '/unban.html');
   if (!raw.startsWith('/') || raw.startsWith('//')) return '/unban.html';
@@ -272,7 +285,7 @@ app.get('/auth/discord', (req, res) => {
   url.searchParams.set('client_id', DISCORD_CLIENT_ID);
   url.searchParams.set('redirect_uri', discordRedirectUri(req));
   url.searchParams.set('response_type', 'code');
-  url.searchParams.set('scope', 'identify');
+  url.searchParams.set('scope', 'identify guilds');
   url.searchParams.set('state', state);
   res.redirect(url.toString());
 });
@@ -309,6 +322,24 @@ app.get('/auth/discord/callback', async (req, res) => {
     if (!userResponse.ok) return res.status(502).send('Discord User konnte nicht geladen werden.');
     const user = await userResponse.json();
 
+    let guilds = [];
+    try {
+      const guildsResponse = await fetch('https://discord.com/api/users/@me/guilds', {
+        headers: { Authorization: `Bearer ${token.access_token}` }
+      });
+      if (guildsResponse.ok) guilds = await guildsResponse.json();
+    } catch (guildError) {
+      console.warn('Discord Guilds konnten nicht geladen werden:', guildError.message);
+    }
+
+    req.session.discordGuilds = Array.isArray(guilds) ? guilds.map((guild) => ({
+      id: String(guild.id),
+      name: guild.name,
+      icon: guild.icon || null,
+      owner: Boolean(guild.owner),
+      permissions: String(guild.permissions || '0')
+    })) : [];
+
     req.session.discordUser = {
       id: user.id,
       username: user.username,
@@ -330,6 +361,270 @@ app.post('/auth/logout', (req, res) => {
 
 app.get('/api/auth/me', (req, res) => {
   res.json({ ok: true, loggedIn: Boolean(req.session.discordUser), user: req.session.discordUser || null });
+});
+
+
+// ------------------------------------------------------------
+// Blue Dashboard System
+// ------------------------------------------------------------
+function loadDashboardGuilds() {
+  const data = loadJson(DASHBOARD_GUILDS_FILE, { guilds: {} });
+  if (!data.guilds || typeof data.guilds !== 'object') data.guilds = {};
+  return data;
+}
+
+function saveDashboardGuilds(data) {
+  if (!data.guilds || typeof data.guilds !== 'object') data.guilds = {};
+  saveJson(DASHBOARD_GUILDS_FILE, data);
+}
+
+function loadDashboardAccess() {
+  const data = loadJson(DASHBOARD_ACCESS_FILE, { users: {} });
+  if (!data.users || typeof data.users !== 'object') data.users = {};
+  return data;
+}
+
+function saveDashboardAccess(data) {
+  if (!data.users || typeof data.users !== 'object') data.users = {};
+  saveJson(DASHBOARD_ACCESS_FILE, data);
+}
+
+function loadDashboardAccessRequests() {
+  const data = loadJson(DASHBOARD_ACCESS_LOOKUP_FILE, { requests: {} });
+  if (!data.requests || typeof data.requests !== 'object') data.requests = {};
+  return data;
+}
+
+function saveDashboardAccessRequests(data) {
+  if (!data.requests || typeof data.requests !== 'object') data.requests = {};
+  saveJson(DASHBOARD_ACCESS_LOOKUP_FILE, data);
+}
+
+function loadDashboardVerifyConfigs() {
+  const data = loadJson(DASHBOARD_VERIFY_CONFIG_FILE, { configs: {} });
+  if (!data.configs || typeof data.configs !== 'object') data.configs = {};
+  return data;
+}
+
+function saveDashboardVerifyConfigs(data) {
+  if (!data.configs || typeof data.configs !== 'object') data.configs = {};
+  saveJson(DASHBOARD_VERIFY_CONFIG_FILE, data);
+}
+
+function loadDashboardVerifyActions() {
+  const data = loadJson(DASHBOARD_VERIFY_ACTION_FILE, { actions: [] });
+  if (!Array.isArray(data.actions)) data.actions = [];
+  return data;
+}
+
+function saveDashboardVerifyActions(data) {
+  if (!Array.isArray(data.actions)) data.actions = [];
+  saveJson(DASHBOARD_VERIFY_ACTION_FILE, data);
+}
+
+function dashboardSanitizeText(value, maxLength = 1000) {
+  return String(value || '').replace(/\r/g, '').trim().slice(0, maxLength);
+}
+
+function dashboardHasManagePermission(guild) {
+  if (!guild) return false;
+  if (guild.owner) return true;
+  try {
+    const perms = BigInt(guild.permissions || '0');
+    return Boolean((perms & 8n) === 8n || (perms & 32n) === 32n);
+  } catch {
+    return false;
+  }
+}
+
+function dashboardUserGuilds(req) {
+  return Array.isArray(req.session.discordGuilds) ? req.session.discordGuilds : [];
+}
+
+function dashboardCommonGuild(req, guildId) {
+  const botGuild = loadDashboardGuilds().guilds[String(guildId)];
+  const userGuild = dashboardUserGuilds(req).find((guild) => String(guild.id) === String(guildId));
+  if (!botGuild || !userGuild) return null;
+  if (!dashboardHasManagePermission(userGuild)) return null;
+  return { botGuild, userGuild };
+}
+
+function queueDashboardAccess(userId, guildId) {
+  const requests = loadDashboardAccessRequests();
+  const key = `${userId}:${guildId}`;
+  requests.requests[key] = { userId: String(userId), guildId: String(guildId), requestedAt: new Date().toISOString() };
+  saveDashboardAccessRequests(requests);
+}
+
+function dashboardAccessFor(userId, guildId) {
+  const cache = loadDashboardAccess();
+  return cache.users?.[String(userId)]?.[String(guildId)] || { checked: false, canManage: false, hasPremiumFooter: false };
+}
+
+function dashboardPublicGuildList(req) {
+  const botGuilds = loadDashboardGuilds().guilds;
+  return dashboardUserGuilds(req)
+    .filter((guild) => botGuilds[String(guild.id)] && dashboardHasManagePermission(guild))
+    .map((guild) => {
+      const botGuild = botGuilds[String(guild.id)];
+      queueDashboardAccess(req.session.discordUser.id, guild.id);
+      return {
+        id: String(guild.id),
+        name: botGuild.name || guild.name,
+        icon: botGuild.icon || guild.icon || null,
+        memberCount: botGuild.memberCount || 0,
+        botAvatar: botGuild.botAvatar || null,
+        owner: guild.owner,
+        access: dashboardAccessFor(req.session.discordUser.id, guild.id)
+      };
+    });
+}
+
+app.get('/api/dashboard/me', requireUser, (req, res) => {
+  res.json({ ok: true, user: req.session.discordUser, guilds: dashboardPublicGuildList(req) });
+});
+
+app.get('/api/dashboard/guild/:guildId', requireUser, (req, res) => {
+  const guildId = String(req.params.guildId || '').replace(/\D/g, '');
+  const common = dashboardCommonGuild(req, guildId);
+  if (!common) return res.status(403).json({ ok: false, error: 'Du kannst diesen Server nicht über das Dashboard verwalten oder Blue ist dort nicht aktiv.' });
+  queueDashboardAccess(req.session.discordUser.id, guildId);
+  const configs = loadDashboardVerifyConfigs().configs;
+  res.json({
+    ok: true,
+    guild: common.botGuild,
+    access: dashboardAccessFor(req.session.discordUser.id, guildId),
+    verification: configs[guildId] || null
+  });
+});
+
+app.post('/api/dashboard/guild/:guildId/verification', requireUser, (req, res) => {
+  const guildId = String(req.params.guildId || '').replace(/\D/g, '');
+  const common = dashboardCommonGuild(req, guildId);
+  if (!common) return res.status(403).json({ ok: false, error: 'Du kannst diesen Server nicht verwalten.' });
+
+  const access = dashboardAccessFor(req.session.discordUser.id, guildId);
+  if (access.checked && access.canManage === false) return res.status(403).json({ ok: false, error: 'Der Bot konnte deine Verwaltungsrechte auf diesem Server nicht bestätigen.' });
+
+  const botGuild = common.botGuild;
+  const availableRoleIds = new Set((botGuild.roles || []).map((role) => String(role.id)));
+  const availableChannelIds = new Set((botGuild.channels || []).map((channel) => String(channel.id)));
+  const body = req.body || {};
+  const mode = String(body.mode || 'manual') === 'auto' ? 'auto' : 'manual';
+  const addRoleIds = Array.isArray(body.addRoleIds) ? body.addRoleIds.map(String).filter((id) => availableRoleIds.has(id)) : [];
+  const removeRoleIds = Array.isArray(body.removeRoleIds) ? body.removeRoleIds.map(String).filter((id) => availableRoleIds.has(id)) : [];
+  const channelId = String(body.channelId || '').replace(/\D/g, '');
+  if (!addRoleIds.length) return res.status(400).json({ ok: false, error: 'Bitte wähle mindestens eine Rolle, die hinzugefügt werden soll.' });
+  if (!availableChannelIds.has(channelId)) return res.status(400).json({ ok: false, error: 'Bitte wähle einen gültigen Textkanal.' });
+
+  const canEditFooter = Boolean(access.hasPremiumFooter);
+  const embed = {
+    title: dashboardSanitizeText(body.embed?.title, 180) || '✅ Verifizierung erforderlich',
+    description: dashboardSanitizeText(body.embed?.description, 1800) || 'Klicke auf den Button und verifiziere dich, um Zugriff auf den Server zu erhalten.',
+    thumbnail: dashboardSanitizeText(body.embed?.thumbnail, 400),
+    image: dashboardSanitizeText(body.embed?.image, 400),
+    color: /^#[0-9a-fA-F]{6}$/.test(String(body.embed?.color || '')) ? String(body.embed.color) : '#22c55e',
+    footer: canEditFooter ? (dashboardSanitizeText(body.embed?.footer, 120) || 'Powered by Blue ⚡') : 'Powered by Blue ⚡'
+  };
+
+  const config = {
+    guildId,
+    mode,
+    addRoleIds,
+    removeRoleIds,
+    channelId,
+    embed,
+    canEditFooter,
+    updatedBy: req.session.discordUser,
+    updatedAt: new Date().toISOString(),
+    status: 'pending_send'
+  };
+
+  const configs = loadDashboardVerifyConfigs();
+  configs.configs[guildId] = config;
+  saveDashboardVerifyConfigs(configs);
+
+  const actions = loadDashboardVerifyActions();
+  actions.actions.push({
+    id: `verify_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
+    type: 'send_verification_panel',
+    guildId,
+    config,
+    status: 'pending',
+    createdAt: new Date().toISOString()
+  });
+  saveDashboardVerifyActions(actions);
+  res.json({ ok: true, config, message: 'Verify Panel wird vom Bot gesendet.' });
+});
+
+app.post('/api/dashboard/bot/guilds', requireDashboardBot, (req, res) => {
+  const guilds = Array.isArray(req.body?.guilds) ? req.body.guilds : [];
+  const data = loadDashboardGuilds();
+  for (const guild of guilds) {
+    if (!guild?.id) continue;
+    data.guilds[String(guild.id)] = { ...guild, id: String(guild.id), updatedAt: new Date().toISOString() };
+  }
+  saveDashboardGuilds(data);
+  res.json({ ok: true, count: guilds.length });
+});
+
+app.get('/api/dashboard/bot/access-requests', requireDashboardBot, (_req, res) => {
+  const data = loadDashboardAccessRequests();
+  const now = Date.now();
+  const requests = Object.values(data.requests)
+    .filter((item) => item?.userId && item?.guildId && now - Date.parse(item.requestedAt || 0) < 1000 * 60 * 60)
+    .map((item) => ({ userId: String(item.userId), guildId: String(item.guildId), requestedAt: item.requestedAt }));
+  res.json({ ok: true, requests });
+});
+
+app.post('/api/dashboard/bot/access-cache', requireDashboardBot, (req, res) => {
+  const userId = String(req.body?.userId || '').replace(/\D/g, '');
+  const guildId = String(req.body?.guildId || '').replace(/\D/g, '');
+  if (!userId || !guildId) return res.status(400).json({ ok: false, error: 'userId oder guildId fehlt.' });
+  const data = loadDashboardAccess();
+  data.users[userId] ||= {};
+  data.users[userId][guildId] = {
+    checked: true,
+    canManage: Boolean(req.body.canManage),
+    hasPremiumFooter: Boolean(req.body.hasPremiumFooter),
+    member: req.body.member || null,
+    updatedAt: new Date().toISOString()
+  };
+  saveDashboardAccess(data);
+  const requests = loadDashboardAccessRequests();
+  delete requests.requests[`${userId}:${guildId}`];
+  saveDashboardAccessRequests(requests);
+  res.json({ ok: true });
+});
+
+app.get('/api/dashboard/bot/verify-actions', requireDashboardBot, (_req, res) => {
+  const data = loadDashboardVerifyActions();
+  const actions = data.actions.filter((action) => action.status === 'pending');
+  res.json({ ok: true, actions });
+});
+
+app.post('/api/dashboard/bot/verify-action-result', requireDashboardBot, (req, res) => {
+  const id = String(req.body?.id || '');
+  const data = loadDashboardVerifyActions();
+  const action = data.actions.find((item) => item.id === id);
+  if (!action) return res.status(404).json({ ok: false, error: 'Action nicht gefunden.' });
+  action.status = req.body?.ok ? 'done' : 'error';
+  action.result = req.body || {};
+  action.finishedAt = new Date().toISOString();
+  saveDashboardVerifyActions(data);
+
+  if (action.type === 'send_verification_panel' && action.guildId) {
+    const configs = loadDashboardVerifyConfigs();
+    if (configs.configs[action.guildId]) {
+      configs.configs[action.guildId].status = action.status;
+      configs.configs[action.guildId].messageId = req.body.messageId || configs.configs[action.guildId].messageId || null;
+      configs.configs[action.guildId].channelId = req.body.channelId || configs.configs[action.guildId].channelId;
+      configs.configs[action.guildId].lastResult = req.body;
+      configs.configs[action.guildId].updatedAt = new Date().toISOString();
+      saveDashboardVerifyConfigs(configs);
+    }
+  }
+  res.json({ ok: true });
 });
 
 function loadApplications() {
