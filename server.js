@@ -18,9 +18,9 @@ const HEARTBEAT_TIMEOUT_SECONDS = Number(process.env.HEARTBEAT_TIMEOUT_SECONDS |
 const HEARTBEAT_FILE = path.join(__dirname, 'data', 'heartbeat-state.json');
 
 const SESSION_SECRET = process.env.SESSION_SECRET || HEARTBEAT_SECRET || crypto.randomBytes(32).toString('hex');
-const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || process.env.CLIENT_ID || '1321889022380871681';
-const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || '';
-const PUBLIC_SITE_URL = (process.env.PUBLIC_SITE_URL || process.env.WEBSITE_PUBLIC_URL || '').replace(/\/$/, '');
+const DISCORD_CLIENT_ID = String(process.env.DISCORD_CLIENT_ID || process.env.CLIENT_ID || '1321889022380871681').trim();
+const DISCORD_CLIENT_SECRET = String(process.env.DISCORD_CLIENT_SECRET || '').trim();
+const PUBLIC_SITE_URL = String(process.env.PUBLIC_SITE_URL || process.env.WEBSITE_PUBLIC_URL || '').trim().replace(/\/$/, '');
 const UNBAN_API_SECRET = process.env.UNBAN_API_SECRET || HEARTBEAT_SECRET || '';
 const UNBAN_APPLICATIONS_FILE = path.join(__dirname, 'data', 'unban-applications.json');
 const UNBAN_BAN_CACHE_FILE = path.join(__dirname, 'data', 'unban-ban-cache.json');
@@ -238,11 +238,14 @@ app.get('/api/status', (_req, res) => {
 
 function publicBaseUrl(req) {
   if (PUBLIC_SITE_URL) return PUBLIC_SITE_URL;
-  return `${req.protocol}://${req.get('host')}`;
+  const forwardedProto = String(req.get('x-forwarded-proto') || req.protocol || 'https').split(',')[0].trim();
+  const forwardedHost = String(req.get('x-forwarded-host') || req.get('host') || '').split(',')[0].trim();
+  return `${forwardedProto || 'https'}://${forwardedHost}`;
 }
 
 function discordRedirectUri(req) {
-  return process.env.DISCORD_REDIRECT_URI || `${publicBaseUrl(req)}/auth/discord/callback`;
+  const explicitRedirect = String(process.env.DISCORD_REDIRECT_URI || '').trim();
+  return explicitRedirect || `${publicBaseUrl(req)}/auth/discord/callback`;
 }
 
 function requireUser(req, res, next) {
@@ -283,9 +286,12 @@ app.get('/auth/discord', (req, res) => {
   req.session.oauthState = state;
   req.session.returnTo = cleanReturnPath(req.query.return);
 
+  const redirectUri = discordRedirectUri(req);
+  req.session.discordRedirectUri = redirectUri;
+
   const url = new URL('https://discord.com/oauth2/authorize');
   url.searchParams.set('client_id', DISCORD_CLIENT_ID);
-  url.searchParams.set('redirect_uri', discordRedirectUri(req));
+  url.searchParams.set('redirect_uri', redirectUri);
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('scope', 'identify guilds');
   url.searchParams.set('state', state);
@@ -298,6 +304,8 @@ app.get('/auth/discord/callback', async (req, res) => {
       return res.status(400).send('Discord Login ungültig oder abgelaufen.');
     }
 
+    const redirectUri = req.session.discordRedirectUri || discordRedirectUri(req);
+
     const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -306,14 +314,21 @@ app.get('/auth/discord/callback', async (req, res) => {
         client_secret: DISCORD_CLIENT_SECRET,
         grant_type: 'authorization_code',
         code: String(req.query.code),
-        redirect_uri: discordRedirectUri(req)
+        redirect_uri: redirectUri
       })
     });
 
     if (!tokenResponse.ok) {
       const text = await tokenResponse.text();
-      console.warn('Discord OAuth Token Fehler:', text.slice(0, 240));
-      return res.status(502).send('Discord Login fehlgeschlagen. Prüfe Redirect URL und Client Secret.');
+      console.warn('Discord OAuth Token Fehler:', {
+        status: tokenResponse.status,
+        redirectUri,
+        body: text.slice(0, 500)
+      });
+      return res.status(502).send(
+        'Discord Login fehlgeschlagen. Prüfe in Render DISCORD_CLIENT_SECRET und DISCORD_REDIRECT_URI. ' +
+        'Benutzte Redirect URL: ' + redirectUri
+      );
     }
 
     const token = await tokenResponse.json();
@@ -350,6 +365,7 @@ app.get('/auth/discord/callback', async (req, res) => {
       discriminator: user.discriminator || '0'
     };
     delete req.session.oauthState;
+    delete req.session.discordRedirectUri;
     res.redirect(cleanReturnPath(req.session.returnTo));
   } catch (error) {
     console.error('Discord Login Fehler:', error);
