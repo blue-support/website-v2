@@ -89,7 +89,7 @@
             </div>
 
             <div class="dashboard-departments dashboard-departments-pro">
-              <button class="dashboard-dept" type="button" data-dashboard-section="messages"><span>💬</span><strong>Messages</strong><small>Bald...</small></button>
+              <button class="dashboard-dept" type="button" data-dashboard-section="messages"><span>💬</span><strong>Messages</strong><small>Öffnen</small></button>
               <button class="dashboard-dept" type="button" data-dashboard-section="globalchat"><span>🌍</span><strong>Globalchat</strong><small>Öffnen</small></button>
               <button class="dashboard-dept" type="button" data-dashboard-section="moderation"><span>🛡️</span><strong>Moderation</strong><small>Bald...</small></button>
               <button class="dashboard-dept" type="button" data-dashboard-section="security"><span>🔒</span><strong>Security</strong><small>Bald...</small></button>
@@ -101,6 +101,77 @@
               <h3>Bald...</h3>
               <p>Diese Abteilung wird später im Dashboard freigeschaltet.</p>
             </div>
+
+            <form class="dashboard-messages-form dashboard-feature-form" data-dashboard-messages-form hidden>
+              <div class="verify-toolbar">
+                <div>
+                  <span class="eyebrow">Messages</span>
+                  <h3>Embed Builder</h3>
+                  <p>Erstelle, speichere und sende professionelle Discord-Embeds direkt über das Dashboard.</p>
+                </div>
+                <button class="btn ghost" type="button" data-dashboard-message-new>Neue Message</button>
+              </div>
+
+              <div class="messages-builder-grid">
+                <aside class="verify-config-card messages-list-card">
+                  <span class="eyebrow">Gespeichert</span>
+                  <h3>Messages</h3>
+                  <p class="muted compact">Jede Message braucht einen Namen, z. B. Regeln, Information oder Willkommen.</p>
+                  <div class="dashboard-message-list" data-dashboard-message-list><p class="muted">Noch keine Message gespeichert.</p></div>
+                </aside>
+
+                <section class="verify-config-card messages-editor-card">
+                  <span class="eyebrow">Editor</span>
+                  <h3>Embed Inhalt</h3>
+                  <input type="hidden" name="messageId" data-message-id>
+                  <label>Message Name<input name="messageName" maxlength="80" placeholder="z. B. Regeln, Information" required></label>
+                  <label>Kanal auswählen<select name="messageChannelId" data-dashboard-message-channel-select required></select></label>
+
+                  <div class="form-row">
+                    <label>Author<input name="messageAuthor" maxlength="256" placeholder="Blue Team"></label>
+                    <label>Author Image URL<input name="messageAuthorImage" placeholder="https://..."></label>
+                  </div>
+
+                  <div class="form-row">
+                    <label>Titel<input name="messageTitle" maxlength="256" placeholder="Regeln"></label>
+                    <label>Titel URL<input name="messageTitleUrl" placeholder="https://..."></label>
+                  </div>
+
+                  <label>Beschreibung<textarea name="messageDescription" maxlength="4000" placeholder="Schreibe hier den Embed-Text..."></textarea></label>
+
+                  <div class="form-row">
+                    <label>Embed Farbe<input name="messageColor" type="color" value="#38bdf8"></label>
+                    <label>Thumbnail URL<input name="messageThumbnail" placeholder="https://..."></label>
+                  </div>
+                  <label>Image URL<input name="messageImage" placeholder="https://..."></label>
+                  <label>Footer<input name="messageFooter" maxlength="2048" value="Powered by Blue ⚡" data-dashboard-message-footer-input><small data-dashboard-message-footer-note>Ohne Blue Premium auf dem Mainserver bleibt der Footer fest auf Powered by Blue ⚡.</small></label>
+
+                  <div class="form-actions">
+                    <button class="btn primary" type="submit">Message senden</button>
+                    <button class="btn ghost" type="button" data-dashboard-message-reset>Zurücksetzen</button>
+                  </div>
+                </section>
+
+                <aside class="discord-embed-preview-card">
+                  <span class="eyebrow">Discord Preview</span>
+                  <div class="discord-message-preview">
+                    <div class="discord-avatar">⚡</div>
+                    <div class="discord-message-body">
+                      <div class="discord-message-author">Blue <span>BOT</span></div>
+                      <div class="discord-embed-preview" data-message-preview-card>
+                        <div class="discord-embed-author" data-message-preview-author hidden></div>
+                        <a class="discord-embed-title" data-message-preview-title href="#" target="_blank" rel="noopener">Embed Titel</a>
+                        <div class="discord-embed-description" data-message-preview-description>Embed Beschreibung</div>
+                        <img class="discord-embed-thumbnail" data-message-preview-thumbnail alt="Thumbnail" hidden>
+                        <img class="discord-embed-image" data-message-preview-image alt="Image" hidden>
+                        <div class="discord-embed-footer" data-message-preview-footer>Powered by Blue ⚡</div>
+                      </div>
+                    </div>
+                  </div>
+                  <small>Die Vorschau ist nah an Discord angelehnt. Discord kann einzelne Abstände minimal anders rendern.</small>
+                </aside>
+              </div>
+            </form>
 
             <form class="dashboard-globalchat-form dashboard-feature-form" data-dashboard-globalchat-form hidden>
               <div class="verify-toolbar">

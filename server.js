@@ -54,6 +54,8 @@ const DASHBOARD_VERIFY_CONFIG_FILE = path.join(DATA_DIR, 'dashboard-verify-confi
 const DASHBOARD_VERIFY_ACTION_FILE = path.join(DATA_DIR, 'dashboard-verify-actions.json');
 const DASHBOARD_GLOBALCHAT_CONFIG_FILE = path.join(DATA_DIR, 'dashboard-globalchat-configs.json');
 const DASHBOARD_GLOBALCHAT_ACTION_FILE = path.join(DATA_DIR, 'dashboard-globalchat-actions.json');
+const DASHBOARD_MESSAGES_CONFIG_FILE = path.join(DATA_DIR, 'dashboard-messages-configs.json');
+const DASHBOARD_MESSAGES_ACTION_FILE = path.join(DATA_DIR, 'dashboard-messages-actions.json');
 fs.mkdirSync(TICKET_UPLOAD_DIR, { recursive: true });
 
 const ticketUploadStorage = multer.diskStorage({
@@ -753,6 +755,45 @@ function saveDashboardGlobalchatActions(data) {
   saveJson(DASHBOARD_GLOBALCHAT_ACTION_FILE, data);
 }
 
+
+function loadDashboardMessagesConfigs() {
+  const data = loadJson(DASHBOARD_MESSAGES_CONFIG_FILE, { guilds: {} });
+  if (!data.guilds || typeof data.guilds !== 'object') data.guilds = {};
+  return data;
+}
+
+function saveDashboardMessagesConfigs(data) {
+  if (!data.guilds || typeof data.guilds !== 'object') data.guilds = {};
+  saveJson(DASHBOARD_MESSAGES_CONFIG_FILE, data);
+}
+
+function loadDashboardMessagesActions() {
+  const data = loadJson(DASHBOARD_MESSAGES_ACTION_FILE, { actions: [] });
+  if (!Array.isArray(data.actions)) data.actions = [];
+  return data;
+}
+
+function saveDashboardMessagesActions(data) {
+  if (!Array.isArray(data.actions)) data.actions = [];
+  saveJson(DASHBOARD_MESSAGES_ACTION_FILE, data);
+}
+
+function dashboardPublicMessage(message) {
+  if (!message || typeof message !== 'object') return null;
+  return {
+    id: String(message.id || ''),
+    guildId: String(message.guildId || ''),
+    name: String(message.name || 'Message'),
+    channelId: message.channelId ? String(message.channelId) : null,
+    embed: message.embed || {},
+    status: message.status || 'saved',
+    lastResult: message.lastResult || null,
+    discordMessageId: message.discordMessageId || null,
+    updatedAt: message.updatedAt || null,
+    createdAt: message.createdAt || null,
+  };
+}
+
 function dashboardSanitizeText(value, maxLength = 1000) {
   return String(value || '').replace(/\r/g, '').trim().slice(0, maxLength);
 }
@@ -884,13 +925,107 @@ app.get('/api/dashboard/guild/:guildId', requireUser, (req, res) => {
   queueDashboardAccess(req.session.discordUser.id, guildId);
   const verifyConfigs = loadDashboardVerifyConfigs().configs;
   const globalchatConfigs = loadDashboardGlobalchatConfigs().configs;
+  const messagesConfigs = loadDashboardMessagesConfigs().guilds;
   res.json({
     ok: true,
     guild: common.botGuild,
     access: dashboardAccessFor(req.session.discordUser.id, guildId),
     verification: verifyConfigs[guildId] || null,
-    globalchat: globalchatConfigs[guildId] || common.botGuild.globalchat || null
+    globalchat: globalchatConfigs[guildId] || common.botGuild.globalchat || null,
+    messages: { messages: (messagesConfigs[guildId]?.messages || []).map(dashboardPublicMessage).filter(Boolean) }
   });
+});
+
+
+app.post('/api/dashboard/guild/:guildId/messages', requireUser, (req, res) => {
+  const guildId = String(req.params.guildId || '').replace(/\D/g, '');
+  const common = dashboardCommonGuild(req, guildId);
+  if (!common) return res.status(403).json({ ok: false, error: 'Nicht verfügbar - Administrator benötigt. Du brauchst Administratorrechte auf diesem Server.' });
+
+  const access = dashboardAccessFor(req.session.discordUser.id, guildId);
+  if (access.checked && access.canManage === false) return res.status(403).json({ ok: false, error: 'Der Bot konnte deine Administratorrechte auf diesem Server nicht bestätigen.' });
+
+  const botGuild = common.botGuild;
+  const textChannels = (botGuild.channels || []).filter((channel) => ['text', 'news'].includes(channel.type));
+  const availableChannelIds = new Set(textChannels.map((channel) => String(channel.id)));
+  const body = req.body || {};
+  const id = String(body.id || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80) || `msg_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
+  const name = dashboardSanitizeText(body.name, 80);
+  const channelId = String(body.channelId || '').replace(/\D/g, '');
+
+  if (!name) return res.status(400).json({ ok: false, error: 'Bitte gib der Message einen Namen, z. B. Regeln oder Information.' });
+  if (!availableChannelIds.has(channelId)) return res.status(400).json({ ok: false, error: 'Bitte wähle einen gültigen Textkanal.' });
+
+  const canEditFooter = Boolean(access.hasPremiumFooter);
+  const embed = {
+    author: dashboardSanitizeText(body.embed?.author, 256),
+    authorImage: dashboardSanitizeText(body.embed?.authorImage, 400),
+    title: dashboardSanitizeText(body.embed?.title, 256),
+    titleUrl: dashboardSanitizeText(body.embed?.titleUrl, 400),
+    description: dashboardSanitizeText(body.embed?.description, 4000),
+    image: dashboardSanitizeText(body.embed?.image, 400),
+    thumbnail: dashboardSanitizeText(body.embed?.thumbnail, 400),
+    color: /^#[0-9a-fA-F]{6}$/.test(String(body.embed?.color || '')) ? String(body.embed.color) : '#38bdf8',
+    footer: canEditFooter ? (dashboardSanitizeText(body.embed?.footer, 2048) || 'Powered by Blue ⚡') : 'Powered by Blue ⚡'
+  };
+
+  if (!embed.title && !embed.description && !embed.image && !embed.thumbnail) {
+    return res.status(400).json({ ok: false, error: 'Bitte fülle mindestens Titel, Beschreibung, Bild oder Thumbnail aus.' });
+  }
+
+  const data = loadDashboardMessagesConfigs();
+  data.guilds[guildId] ||= { guildId, messages: [] };
+  if (!Array.isArray(data.guilds[guildId].messages)) data.guilds[guildId].messages = [];
+
+  const now = new Date().toISOString();
+  let message = data.guilds[guildId].messages.find((item) => String(item.id) === id);
+  if (!message) {
+    message = { id, guildId, createdAt: now };
+    data.guilds[guildId].messages.push(message);
+  }
+  Object.assign(message, {
+    id,
+    guildId,
+    name,
+    channelId,
+    embed,
+    canEditFooter,
+    updatedBy: req.session.discordUser,
+    updatedAt: now,
+    status: 'pending_send'
+  });
+  saveDashboardMessagesConfigs(data);
+
+  const actions = loadDashboardMessagesActions();
+  actions.actions.push({
+    id: `message_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
+    type: 'send_dashboard_message',
+    guildId,
+    messageId: id,
+    config: message,
+    status: 'pending',
+    createdAt: now
+  });
+  saveDashboardMessagesActions(actions);
+
+  res.json({ ok: true, message: dashboardPublicMessage(message), info: 'Message wird vom Bot gesendet.' });
+});
+
+app.delete('/api/dashboard/guild/:guildId/messages/:messageId', requireUser, (req, res) => {
+  const guildId = String(req.params.guildId || '').replace(/\D/g, '');
+  const messageId = String(req.params.messageId || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80);
+  const common = dashboardCommonGuild(req, guildId);
+  if (!common) return res.status(403).json({ ok: false, error: 'Nicht verfügbar - Administrator benötigt. Du brauchst Administratorrechte auf diesem Server.' });
+  const access = dashboardAccessFor(req.session.discordUser.id, guildId);
+  if (access.checked && access.canManage === false) return res.status(403).json({ ok: false, error: 'Der Bot konnte deine Administratorrechte auf diesem Server nicht bestätigen.' });
+
+  const data = loadDashboardMessagesConfigs();
+  const guildData = data.guilds[guildId];
+  if (!guildData || !Array.isArray(guildData.messages)) return res.json({ ok: true, deleted: false });
+  const before = guildData.messages.length;
+  guildData.messages = guildData.messages.filter((item) => String(item.id) !== messageId);
+  saveDashboardMessagesConfigs(data);
+  res.json({ ok: true, deleted: before !== guildData.messages.length });
 });
 
 app.post('/api/dashboard/guild/:guildId/globalchat', requireUser, (req, res) => {
@@ -1045,6 +1180,39 @@ app.post('/api/dashboard/bot/access-cache', requireDashboardBot, (req, res) => {
   res.json({ ok: true });
 });
 
+
+app.get('/api/dashboard/bot/message-actions', requireDashboardBot, (_req, res) => {
+  const data = loadDashboardMessagesActions();
+  const actions = data.actions.filter((action) => action.status === 'pending');
+  res.json({ ok: true, actions });
+});
+
+app.post('/api/dashboard/bot/message-action-result', requireDashboardBot, (req, res) => {
+  const id = String(req.body?.id || '');
+  const data = loadDashboardMessagesActions();
+  const action = data.actions.find((item) => item.id === id);
+  if (!action) return res.status(404).json({ ok: false, error: 'Action nicht gefunden.' });
+  action.status = req.body?.ok ? 'done' : 'error';
+  action.result = req.body || {};
+  action.finishedAt = new Date().toISOString();
+  saveDashboardMessagesActions(data);
+
+  if (action.type === 'send_dashboard_message' && action.guildId && action.messageId) {
+    const configs = loadDashboardMessagesConfigs();
+    const guildData = configs.guilds[action.guildId];
+    const message = guildData?.messages?.find((item) => String(item.id) === String(action.messageId));
+    if (message) {
+      message.status = action.status;
+      message.lastResult = req.body || {};
+      message.discordMessageId = req.body.discordMessageId || message.discordMessageId || null;
+      message.channelId = req.body.channelId || message.channelId;
+      message.updatedAt = new Date().toISOString();
+      saveDashboardMessagesConfigs(configs);
+    }
+  }
+  res.json({ ok: true });
+});
+
 app.get('/api/dashboard/bot/globalchat-actions', requireDashboardBot, (_req, res) => {
   const data = loadDashboardGlobalchatActions();
   const actions = data.actions.filter((action) => action.status === 'pending');
@@ -1108,9 +1276,11 @@ app.post('/api/dashboard/bot/verify-action-result', requireDashboardBot, (req, r
 app.post('/api/dashboard/bot/saved-configs', requireDashboardBot, (req, res) => {
   const verifyConfigs = req.body?.verifyConfigs && typeof req.body.verifyConfigs === 'object' ? req.body.verifyConfigs : {};
   const globalchatConfigs = req.body?.globalchatConfigs && typeof req.body.globalchatConfigs === 'object' ? req.body.globalchatConfigs : {};
+  const messagesConfigs = req.body?.messagesConfigs && typeof req.body.messagesConfigs === 'object' ? req.body.messagesConfigs : {};
 
   let verifyCount = 0;
   let globalchatCount = 0;
+  let messagesCount = 0;
 
   if (Object.keys(verifyConfigs).length) {
     const data = loadDashboardVerifyConfigs();
@@ -1161,7 +1331,38 @@ app.post('/api/dashboard/bot/saved-configs', requireDashboardBot, (req, res) => 
     saveDashboardGlobalchatConfigs(data);
   }
 
-  res.json({ ok: true, verifyCount, globalchatCount });
+
+  if (Object.keys(messagesConfigs).length) {
+    const data = loadDashboardMessagesConfigs();
+    for (const [guildIdRaw, guildRaw] of Object.entries(messagesConfigs)) {
+      const guildId = String(guildIdRaw || '').replace(/\D/g, '');
+      if (!guildId || !guildRaw || typeof guildRaw !== 'object') continue;
+      const incomingMessages = Array.isArray(guildRaw.messages) ? guildRaw.messages : [];
+      data.guilds[guildId] ||= { guildId, messages: [] };
+      if (!Array.isArray(data.guilds[guildId].messages)) data.guilds[guildId].messages = [];
+      for (const messageRaw of incomingMessages) {
+        if (!messageRaw || typeof messageRaw !== 'object') continue;
+        const id = String(messageRaw.id || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80);
+        if (!id) continue;
+        let message = data.guilds[guildId].messages.find((item) => String(item.id) === id);
+        if (!message) {
+          message = { id, guildId, createdAt: messageRaw.createdAt || new Date().toISOString() };
+          data.guilds[guildId].messages.push(message);
+        }
+        Object.assign(message, messageRaw, {
+          id,
+          guildId,
+          restoredFromBot: true,
+          status: messageRaw.status || message.status || 'done',
+          updatedAt: messageRaw.updatedAt || message.updatedAt || new Date().toISOString()
+        });
+        messagesCount += 1;
+      }
+    }
+    saveDashboardMessagesConfigs(data);
+  }
+
+  res.json({ ok: true, verifyCount, globalchatCount, messagesCount });
 });
 
 function loadApplications() {
