@@ -185,6 +185,92 @@ function saveJson(filePath, data) {
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
 }
 
+function parseCookieHeader(req) {
+  const raw = String(req.get('cookie') || '');
+  const out = {};
+  for (const part of raw.split(';')) {
+    const index = part.indexOf('=');
+    if (index === -1) continue;
+    const key = part.slice(0, index).trim();
+    const value = part.slice(index + 1).trim();
+    if (!key) continue;
+    try {
+      out[key] = decodeURIComponent(value);
+    } catch {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+function signRememberPayload(payload) {
+  const json = JSON.stringify(payload);
+  const body = Buffer.from(json, 'utf8').toString('base64url');
+  const signature = crypto.createHmac('sha256', SESSION_SECRET).update(body).digest('base64url');
+  return `${body}.${signature}`;
+}
+
+function verifyRememberToken(token) {
+  try {
+    const [body, signature] = String(token || '').split('.');
+    if (!body || !signature) return null;
+    const expected = crypto.createHmac('sha256', SESSION_SECRET).update(body).digest('base64url');
+    const given = Buffer.from(signature);
+    const want = Buffer.from(expected);
+    if (given.length !== want.length || !crypto.timingSafeEqual(given, want)) return null;
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+    if (!payload || Number(payload.expiresAt || 0) <= Date.now()) return null;
+    if (!payload.user || !payload.user.id) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+function rememberCookieOptions(req, maxAgeMs = DISCORD_RELOGIN_CACHE_MS) {
+  const isSecure = String(req.get('x-forwarded-proto') || req.protocol || '').includes('https');
+  return [
+    `Max-Age=${Math.max(1, Math.floor(maxAgeMs / 1000))}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    isSecure ? 'Secure' : ''
+  ].filter(Boolean).join('; ');
+}
+
+function setRememberLoginCookie(req, res) {
+  if (!req.session?.discordUser) return;
+  const payload = {
+    user: req.session.discordUser,
+    guilds: Array.isArray(req.session.discordGuilds) ? req.session.discordGuilds : [],
+    createdAt: Date.now(),
+    expiresAt: Date.now() + DISCORD_RELOGIN_CACHE_MS,
+  };
+  res.setHeader('Set-Cookie', `blue.remember=${encodeURIComponent(signRememberPayload(payload))}; ${rememberCookieOptions(req)}`);
+}
+
+function clearRememberLoginCookie(req, res) {
+  const isSecure = String(req.get('x-forwarded-proto') || req.protocol || '').includes('https');
+  res.setHeader('Set-Cookie', `blue.remember=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax${isSecure ? '; Secure' : ''}`);
+}
+
+function restoreRememberLogin(req) {
+  if (req.session?.discordUser) return true;
+  const token = parseCookieHeader(req)['blue.remember'];
+  const payload = verifyRememberToken(token);
+  if (!payload) return false;
+  req.session.discordUser = payload.user;
+  req.session.discordGuilds = Array.isArray(payload.guilds) ? payload.guilds : [];
+  req.session.cachedDiscordUser = payload.user;
+  req.session.cachedDiscordGuilds = req.session.discordGuilds;
+  req.session.cachedDiscordUserAt = Date.now();
+  req.session.loggedOutAt = null;
+  delete req.session.oauthState;
+  delete req.session.discordRedirectUri;
+  delete req.session.oauthStartedAt;
+  return true;
+}
+
 function loadHeartbeatFromDisk() {
   return loadJson(HEARTBEAT_FILE, null);
 }
@@ -327,6 +413,7 @@ function discordRedirectUri(req) {
 }
 
 function requireUser(req, res, next) {
+  if (!req.session.discordUser) restoreRememberLogin(req);
   if (!req.session.discordUser) return res.status(401).json({ ok: false, error: 'Nicht eingeloggt.' });
   return next();
 }
@@ -363,17 +450,22 @@ app.get('/auth/discord', (req, res) => {
 
   const returnTo = cleanReturnPath(req.query.return);
 
+  const forceFreshOAuth = String(req.query.force || '') === '1';
+
   // Wenn die Session schon aktiv ist, niemals erneut Discord OAuth starten.
   if (req.session.discordUser) {
     return res.redirect(returnTo);
   }
 
-  // Professioneller Re-Login: Wenn der User sich gerade erst ausgeloggt hat,
-  // reaktivieren wir die bereits bestätigte Discord-Session lokal, statt Discord
-  // erneut mit OAuth Token-Requests zu belasten. Für Account-Wechsel: /auth/discord?force=1
+  // Re-Login ohne Discord-Request: zuerst signierten Remember-Cookie wiederherstellen.
+  // Das überlebt auch Render-Neustarts und verhindert OAuth-429 nach normalem Logout/Login.
+  if (!forceFreshOAuth && restoreRememberLogin(req)) {
+    return res.redirect(returnTo);
+  }
+
+  // Fallback innerhalb derselben Server-Session. Für Account-Wechsel: /auth/discord?force=1
   const cachedUser = req.session.cachedDiscordUser || null;
   const cachedAt = Number(req.session.cachedDiscordUserAt || 0);
-  const forceFreshOAuth = String(req.query.force || '') === '1';
   if (!forceFreshOAuth && cachedUser && cachedAt && Date.now() - cachedAt < DISCORD_RELOGIN_CACHE_MS) {
     req.session.discordUser = cachedUser;
     req.session.discordGuilds = Array.isArray(req.session.cachedDiscordGuilds) ? req.session.cachedDiscordGuilds : [];
@@ -462,12 +554,18 @@ app.get('/auth/discord/callback', async (req, res) => {
           const parsed = JSON.parse(text || '{}');
           retryAfter = Number(parsed.retry_after || parsed.retryAfter || retryAfter || 0);
         } catch {}
-        // Kein langer lokaler Block mehr. Wir melden nur Discords echte Antwort.
+
+        // Wenn ein gültiger Remember-Cookie existiert, loggen wir den User lokal ein
+        // statt ihn wegen Discords temporärem Token-Limit auszusperren.
+        if (restoreRememberLogin(req)) {
+          return res.redirect(returnTo);
+        }
+
         discordOAuthBlockedUntil = Date.now() + Math.min(Math.max(retryAfter || 5, 5), 10) * 1000;
-        const retryText = retryAfter ? ` Discord sagt retry_after: ${Math.ceil(retryAfter)} Sekunde(n).` : '';
+        const retryText = retryAfter ? ` Discord retry_after: ${Math.ceil(retryAfter)} Sekunde(n).` : '';
         return res.status(429).send(
-          'Discord selbst hat gerade OAuth-429 zurückgegeben.' + retryText +
-          ' Wenn du dich gerade erst ausgeloggt hast, gehe zurück zur Website und klicke Login erneut; die Website nutzt dann deine gespeicherte lokale Session, statt Discord erneut zu fragen.'
+          'Discord OAuth ist gerade temporär limitiert.' + retryText +
+          ' Die Website speichert ab dem nächsten erfolgreichen Login eine sichere Remember-Session, damit normaler Logout/Login danach ohne neue Discord-OAuth-Anfrage funktioniert.'
         );
       }
 
@@ -521,6 +619,7 @@ app.get('/auth/discord/callback', async (req, res) => {
     delete req.session.oauthState;
     delete req.session.discordRedirectUri;
     delete req.session.oauthStartedAt;
+    setRememberLoginCookie(req, res);
     res.redirect(cleanReturnPath(req.session.returnTo));
   } catch (error) {
     console.error('Discord Login Fehler:', error);
@@ -531,16 +630,17 @@ app.get('/auth/discord/callback', async (req, res) => {
 app.post('/auth/logout', (req, res) => {
   const fullLogout = req.query.full === '1' || req.body?.full === true || req.body?.full === '1';
   if (fullLogout) {
+    clearRememberLoginCookie(req, res);
     return req.session.destroy(() => res.json({ ok: true, fullLogout: true }));
   }
 
-  // Soft-Logout: Für die Website ist der User ausgeloggt, aber die bestätigte
-  // Discord-Session bleibt kurzzeitig lokal gespeichert. Dadurch funktioniert
-  // Logout -> 10 Minuten später wieder Login ohne neuen Discord OAuth-Request.
+  // Soft-Logout: Der User wirkt auf der Website ausgeloggt, aber ein signierter
+  // HttpOnly-Remember-Cookie bleibt erhalten. Login danach fragt Discord nicht neu an.
   if (req.session.discordUser) {
     req.session.cachedDiscordUser = req.session.discordUser;
     req.session.cachedDiscordGuilds = req.session.discordGuilds || [];
     req.session.cachedDiscordUserAt = Date.now();
+    setRememberLoginCookie(req, res);
   }
   delete req.session.discordUser;
   delete req.session.discordGuilds;
@@ -552,11 +652,15 @@ app.post('/auth/logout', (req, res) => {
 });
 
 app.get('/api/auth/me', (req, res) => {
+  const rememberPayload = verifyRememberToken(parseCookieHeader(req)['blue.remember']);
   res.json({
     ok: true,
     loggedIn: Boolean(req.session.discordUser),
     user: req.session.discordUser || null,
-    hasCachedLogin: Boolean(req.session.cachedDiscordUser && Number(req.session.cachedDiscordUserAt || 0) && Date.now() - Number(req.session.cachedDiscordUserAt || 0) < DISCORD_RELOGIN_CACHE_MS)
+    hasCachedLogin: Boolean(
+      (req.session.cachedDiscordUser && Number(req.session.cachedDiscordUserAt || 0) && Date.now() - Number(req.session.cachedDiscordUserAt || 0) < DISCORD_RELOGIN_CACHE_MS)
+      || rememberPayload
+    )
   });
 });
 
