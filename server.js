@@ -757,14 +757,32 @@ function saveDashboardGlobalchatActions(data) {
 
 
 function loadDashboardMessagesConfigs() {
-  const data = loadJson(DASHBOARD_MESSAGES_CONFIG_FILE, { guilds: {} });
+  const data = loadJson(DASHBOARD_MESSAGES_CONFIG_FILE, { guilds: {}, deletedMessageIds: {} });
   if (!data.guilds || typeof data.guilds !== 'object') data.guilds = {};
+  if (!data.deletedMessageIds || typeof data.deletedMessageIds !== 'object') data.deletedMessageIds = {};
   return data;
 }
 
 function saveDashboardMessagesConfigs(data) {
   if (!data.guilds || typeof data.guilds !== 'object') data.guilds = {};
+  if (!data.deletedMessageIds || typeof data.deletedMessageIds !== 'object') data.deletedMessageIds = {};
   saveJson(DASHBOARD_MESSAGES_CONFIG_FILE, data);
+}
+
+function dashboardMessageWasDeleted(data, guildId, messageId) {
+  const deleted = data?.deletedMessageIds?.[String(guildId)];
+  return Boolean(deleted && Object.prototype.hasOwnProperty.call(deleted, String(messageId)));
+}
+
+function dashboardMarkMessageDeleted(data, guildId, messageId) {
+  data.deletedMessageIds ||= {};
+  data.deletedMessageIds[String(guildId)] ||= {};
+  data.deletedMessageIds[String(guildId)][String(messageId)] = new Date().toISOString();
+}
+
+function dashboardUnmarkMessageDeleted(data, guildId, messageId) {
+  const deleted = data?.deletedMessageIds?.[String(guildId)];
+  if (deleted) delete deleted[String(messageId)];
 }
 
 function loadDashboardMessagesActions() {
@@ -974,6 +992,8 @@ app.post('/api/dashboard/guild/:guildId/messages', requireUser, (req, res) => {
   }
 
   const data = loadDashboardMessagesConfigs();
+  // Wenn ein Admin ein Template mit derselben ID bewusst erneut speichert, darf es wieder aktiv werden.
+  dashboardUnmarkMessageDeleted(data, guildId, id);
   data.guilds[guildId] ||= { guildId, messages: [] };
   if (!Array.isArray(data.guilds[guildId].messages)) data.guilds[guildId].messages = [];
 
@@ -1020,12 +1040,30 @@ app.delete('/api/dashboard/guild/:guildId/messages/:messageId', requireUser, (re
   if (access.checked && access.canManage === false) return res.status(403).json({ ok: false, error: 'Der Bot konnte deine Administratorrechte auf diesem Server nicht bestätigen.' });
 
   const data = loadDashboardMessagesConfigs();
+  data.guilds[guildId] ||= { guildId, messages: [] };
   const guildData = data.guilds[guildId];
-  if (!guildData || !Array.isArray(guildData.messages)) return res.json({ ok: true, deleted: false });
+  if (!Array.isArray(guildData.messages)) guildData.messages = [];
+
   const before = guildData.messages.length;
+  const removedMessage = guildData.messages.find((item) => String(item.id) === messageId) || null;
   guildData.messages = guildData.messages.filter((item) => String(item.id) !== messageId);
+  dashboardMarkMessageDeleted(data, guildId, messageId);
+  guildData.updatedAt = new Date().toISOString();
   saveDashboardMessagesConfigs(data);
-  res.json({ ok: true, deleted: before !== guildData.messages.length });
+
+  const actions = loadDashboardMessagesActions();
+  actions.actions.push({
+    id: `message_delete_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
+    type: 'delete_dashboard_message',
+    guildId,
+    messageId,
+    config: removedMessage ? { id: messageId, guildId, channelId: removedMessage.channelId || null } : { id: messageId, guildId },
+    status: 'pending',
+    createdAt: new Date().toISOString()
+  });
+  saveDashboardMessagesActions(actions);
+
+  res.json({ ok: true, deleted: before !== guildData.messages.length, permanentlyHidden: true });
 });
 
 app.post('/api/dashboard/guild/:guildId/globalchat', requireUser, (req, res) => {
@@ -1340,10 +1378,21 @@ app.post('/api/dashboard/bot/saved-configs', requireDashboardBot, (req, res) => 
       const incomingMessages = Array.isArray(guildRaw.messages) ? guildRaw.messages : [];
       data.guilds[guildId] ||= { guildId, messages: [] };
       if (!Array.isArray(data.guilds[guildId].messages)) data.guilds[guildId].messages = [];
+
+      const incomingDeleted = guildRaw.deletedMessageIds && typeof guildRaw.deletedMessageIds === 'object' ? guildRaw.deletedMessageIds : {};
+      for (const deletedIdRaw of Object.keys(incomingDeleted)) {
+        const deletedId = String(deletedIdRaw || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80);
+        if (!deletedId) continue;
+        dashboardMarkMessageDeleted(data, guildId, deletedId);
+        data.guilds[guildId].messages = data.guilds[guildId].messages.filter((item) => String(item.id) !== deletedId);
+      }
+
       for (const messageRaw of incomingMessages) {
         if (!messageRaw || typeof messageRaw !== 'object') continue;
         const id = String(messageRaw.id || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80);
         if (!id) continue;
+        // Gelöschte Templates dürfen durch den Bot-Backup-Sync nicht wieder auftauchen.
+        if (dashboardMessageWasDeleted(data, guildId, id)) continue;
         let message = data.guilds[guildId].messages.find((item) => String(item.id) === id);
         if (!message) {
           message = { id, guildId, createdAt: messageRaw.createdAt || new Date().toISOString() };
