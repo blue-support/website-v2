@@ -280,13 +280,25 @@
                   </div>
                 </div>
 
-                <aside class="verify-preview-card verify-preview-card-pro">
-                  <span class="eyebrow">Live Preview</span>
-                  <h3 data-verify-preview-title>✅ Verifizierung erforderlich</h3>
-                  <p data-verify-preview-description>Um Zugriff auf alle Kanäle zu erhalten, musst du dich zuerst verifizieren. Klicke auf den Button und folge den Anweisungen.</p>
-                  <div class="verify-preview-media" data-verify-preview-media>Embed Image / Thumbnail</div>
-                  <button class="btn primary" type="button" disabled>✅ Verifizieren</button>
-                  <small data-verify-preview-footer>Powered by Blue ⚡</small>
+                <aside class="discord-embed-preview-card verify-discord-preview-card verify-preview-card-pro">
+                  <span class="eyebrow">Discord Preview</span>
+                  <div class="discord-message-preview verify-discord-message-preview">
+                    <div class="discord-avatar">⚡</div>
+                    <div class="discord-message-body">
+                      <div class="discord-message-author">Blue <span>BOT</span></div>
+                      <div class="discord-embed-preview" data-verify-preview-card>
+                        <a class="discord-embed-title" data-verify-preview-title href="#" target="_blank" rel="noopener">✅ Verifizierung erforderlich</a>
+                        <div class="discord-embed-description" data-verify-preview-description>Um Zugriff auf alle Kanäle zu erhalten, musst du dich zuerst verifizieren. Klicke auf den Button und folge den Anweisungen.</div>
+                        <img class="discord-embed-thumbnail" data-verify-preview-thumbnail alt="Thumbnail" hidden>
+                        <img class="discord-embed-image" data-verify-preview-image alt="Image" hidden>
+                        <div class="discord-embed-footer" data-verify-preview-footer>Powered by Blue ⚡</div>
+                      </div>
+                      <div class="discord-action-row-preview">
+                        <button type="button" disabled>✅ Verifizieren</button>
+                      </div>
+                    </div>
+                  </div>
+                  <small>So wirkt dein Verify-Panel später im Discord-Kanal.</small>
                 </aside>
               </div>
             </form>
