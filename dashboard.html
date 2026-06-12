@@ -128,11 +128,28 @@
                   <label>Verify Log Kanal<select name="logChannelId" data-dashboard-log-channel-select></select><small>Optional. Ohne Log-Kanal funktioniert Verify trotzdem.</small></label>
                 </div>
 
-                <div class="verify-config-card roles-section">
+                <div class="verify-config-card roles-section verify-role-builder">
                   <span class="eyebrow">Schritt 3</span>
                   <h3>Rollenverwaltung</h3>
-                  <label>Rollen hinzufügen<select name="addRoleIds" data-dashboard-add-roles multiple required></select><small>Mehrere Rollen möglich. Auf PC STRG/CMD halten.</small></label>
-                  <label>Rollen entfernen optional<select name="removeRoleIds" data-dashboard-remove-roles multiple></select></label>
+                  <p class="muted compact">Klicke Rollen einfach an. Ausgewählte Rollen werden darunter als Tags angezeigt.</p>
+
+                  <div class="role-picker-block">
+                    <div class="role-picker-title">
+                      <strong>Rollen hinzufügen</strong>
+                      <small>Werden nach erfolgreicher Verifizierung vergeben.</small>
+                    </div>
+                    <div class="dashboard-role-picker" data-dashboard-add-role-picker></div>
+                    <div class="selected-role-tags" data-dashboard-add-selected><span class="muted">Keine Rolle gewählt</span></div>
+                  </div>
+
+                  <div class="role-picker-block">
+                    <div class="role-picker-title">
+                      <strong>Rollen entfernen</strong>
+                      <small>Optional. Diese Rollen werden nach Verify entfernt.</small>
+                    </div>
+                    <div class="dashboard-role-picker" data-dashboard-remove-role-picker></div>
+                    <div class="selected-role-tags" data-dashboard-remove-selected><span class="muted">Keine Rolle gewählt</span></div>
+                  </div>
                 </div>
 
                 <div class="verify-config-card security-section">
