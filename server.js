@@ -21,6 +21,8 @@ const SESSION_SECRET = process.env.SESSION_SECRET || HEARTBEAT_SECRET || crypto.
 const DISCORD_CLIENT_ID = String(process.env.DISCORD_CLIENT_ID || process.env.CLIENT_ID || '1321889022380871681').trim();
 const DISCORD_CLIENT_SECRET = String(process.env.DISCORD_CLIENT_SECRET || '').trim();
 const PUBLIC_SITE_URL = String(process.env.PUBLIC_SITE_URL || process.env.WEBSITE_PUBLIC_URL || '').trim().replace(/\/$/, '');
+const DISCORD_OAUTH_RATE_LIMIT_FILE = path.join(__dirname, 'data', 'discord-oauth-rate-limit.json');
+const DISCORD_OAUTH_MIN_RETRY_SECONDS = Number(process.env.DISCORD_OAUTH_MIN_RETRY_SECONDS || 30);
 const UNBAN_API_SECRET = process.env.UNBAN_API_SECRET || HEARTBEAT_SECRET || '';
 const UNBAN_APPLICATIONS_FILE = path.join(__dirname, 'data', 'unban-applications.json');
 const UNBAN_BAN_CACHE_FILE = path.join(__dirname, 'data', 'unban-ban-cache.json');
@@ -56,7 +58,47 @@ const ticketUpload = multer({
 });
 
 let lastHeartbeat = loadHeartbeatFromDisk();
-let discordOAuthBlockedUntil = 0;
+let discordOAuthBlockedUntil = loadDiscordOAuthBlockedUntil();
+const recentlyProcessedOAuthCodes = new Map();
+
+function loadDiscordOAuthBlockedUntil() {
+  try {
+    const data = loadJson(DISCORD_OAUTH_RATE_LIMIT_FILE, { blockedUntil: 0 });
+    const value = Number(data?.blockedUntil || 0);
+    return Number.isFinite(value) ? value : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function saveDiscordOAuthBlockedUntil(value) {
+  try {
+    saveJson(DISCORD_OAUTH_RATE_LIMIT_FILE, { blockedUntil: Number(value) || 0, savedAt: new Date().toISOString() });
+  } catch (error) {
+    console.warn('Discord OAuth Rate-Limit konnte nicht gespeichert werden:', error.message);
+  }
+}
+
+function rememberProcessedOAuthCode(code) {
+  const key = crypto.createHash('sha256').update(String(code || '')).digest('hex');
+  const expiresAt = Date.now() + 10 * 60 * 1000;
+  recentlyProcessedOAuthCodes.set(key, expiresAt);
+  for (const [storedKey, storedExpiresAt] of recentlyProcessedOAuthCodes.entries()) {
+    if (storedExpiresAt <= Date.now()) recentlyProcessedOAuthCodes.delete(storedKey);
+  }
+  return key;
+}
+
+function hasProcessedOAuthCode(code) {
+  const key = crypto.createHash('sha256').update(String(code || '')).digest('hex');
+  const expiresAt = recentlyProcessedOAuthCodes.get(key);
+  if (!expiresAt) return false;
+  if (expiresAt <= Date.now()) {
+    recentlyProcessedOAuthCodes.delete(key);
+    return false;
+  }
+  return true;
+}
 
 function discordOAuthRateLimitMessage() {
   const waitSeconds = Math.max(1, Math.ceil((discordOAuthBlockedUntil - Date.now()) / 1000));
@@ -75,6 +117,7 @@ function discordOAuthSetRateLimit(response, bodyText = '') {
   if (!Number.isFinite(retryAfter) || retryAfter <= 0) retryAfter = 15 * 60;
   retryAfter = Math.min(Math.max(retryAfter, 60), 60 * 60);
   discordOAuthBlockedUntil = Date.now() + retryAfter * 1000;
+  saveDiscordOAuthBlockedUntil(discordOAuthBlockedUntil);
   return retryAfter;
 }
 
@@ -303,12 +346,29 @@ app.get('/auth/discord', (req, res) => {
   if (!DISCORD_CLIENT_ID || !DISCORD_CLIENT_SECRET) {
     return res.status(500).send('Discord OAuth ist nicht konfiguriert. DISCORD_CLIENT_ID und DISCORD_CLIENT_SECRET fehlen.');
   }
+
+  const returnTo = cleanReturnPath(req.query.return);
+
+  // Wenn die Session schon eingeloggt ist, niemals erneut Discord OAuth starten.
+  // Sonst kann ein wiederholter Klick auf Login unnötig Token-Anfragen verursachen.
+  if (req.session.discordUser) {
+    return res.redirect(returnTo);
+  }
+
   if (Date.now() < discordOAuthBlockedUntil) {
     return res.status(429).send(discordOAuthRateLimitMessage());
   }
+
+  const now = Date.now();
+  const lastStart = Number(req.session.oauthStartedAt || 0);
+  if (lastStart && now - lastStart < DISCORD_OAUTH_MIN_RETRY_SECONDS * 1000) {
+    return res.status(429).send(`Discord Login wurde gerade erst gestartet. Bitte warte kurz und klicke nicht mehrfach auf Login.`);
+  }
+
   const state = crypto.randomUUID();
   req.session.oauthState = state;
-  req.session.returnTo = cleanReturnPath(req.query.return);
+  req.session.oauthStartedAt = now;
+  req.session.returnTo = returnTo;
 
   const redirectUri = discordRedirectUri(req);
   req.session.discordRedirectUri = redirectUri;
@@ -324,11 +384,27 @@ app.get('/auth/discord', (req, res) => {
 
 app.get('/auth/discord/callback', async (req, res) => {
   try {
+    const returnTo = req.session.returnTo || '/dashboard.html';
+
+    // Wenn der Callback nach einem erfolgreichen Login refreshed wird, nicht nochmal Discord kontaktieren.
+    if (req.session.discordUser) {
+      return res.redirect(returnTo);
+    }
+
     if (!req.query.code || req.query.state !== req.session.oauthState) {
       return res.status(400).send('Discord Login ungültig oder abgelaufen.');
     }
 
+    const code = String(req.query.code);
+    if (hasProcessedOAuthCode(code)) {
+      return res.status(429).send('Dieser Discord Login-Code wurde bereits verarbeitet. Bitte öffne die Seite neu, statt den Callback zu aktualisieren.');
+    }
+    rememberProcessedOAuthCode(code);
+
     const redirectUri = req.session.discordRedirectUri || discordRedirectUri(req);
+
+    // State direkt verbrauchen, damit derselbe Callback nicht mehrfach Token-Anfragen sendet.
+    delete req.session.oauthState;
 
     if (Date.now() < discordOAuthBlockedUntil) {
       return res.status(429).send(discordOAuthRateLimitMessage());
@@ -341,7 +417,7 @@ app.get('/auth/discord/callback', async (req, res) => {
         client_id: DISCORD_CLIENT_ID,
         client_secret: DISCORD_CLIENT_SECRET,
         grant_type: 'authorization_code',
-        code: String(req.query.code),
+        code,
         redirect_uri: redirectUri
       })
     });
@@ -404,6 +480,7 @@ app.get('/auth/discord/callback', async (req, res) => {
     };
     delete req.session.oauthState;
     delete req.session.discordRedirectUri;
+    delete req.session.oauthStartedAt;
     res.redirect(cleanReturnPath(req.session.returnTo));
   } catch (error) {
     console.error('Discord Login Fehler:', error);
