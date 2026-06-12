@@ -1042,3 +1042,40 @@ img,video,canvas{max-width:100%}
     justify-content: space-between;
   }
 }
+
+/* Dashboard Globalchat Setup */
+.dashboard-feature-form {
+  margin-top: 18px;
+}
+
+.feature-setup-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.feature-primary-card,
+.feature-preview-card {
+  min-height: 100%;
+}
+
+.feature-preview-line {
+  margin: 14px 0;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, .18);
+  background: rgba(15, 23, 42, .46);
+  color: var(--text);
+}
+
+.feature-preview-line strong {
+  color: var(--muted);
+  margin-right: 6px;
+}
+
+@media (max-width: 920px) {
+  .feature-setup-grid {
+    grid-template-columns: 1fr;
+  }
+}

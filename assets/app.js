@@ -717,6 +717,7 @@ async function initDashboardPage() {
   const empty = $('[data-dashboard-empty]');
   const workspace = $('[data-dashboard-workspace]');
   const form = $('[data-dashboard-verify-form]');
+  const globalchatForm = $('[data-dashboard-globalchat-form]');
   const soon = $('[data-dashboard-soon]');
   let selectedGuildId = null;
   let selectedGuildData = null;
@@ -725,6 +726,8 @@ async function initDashboardPage() {
   let selectedAddRoleIds = new Set();
   let selectedRemoveRoleIds = new Set();
   let dashboardDirty = false;
+  let dashboardChannels = [];
+  let globalchatDirty = false;
 
   function showDashboardMessage(text, type = 'info') {
     if (!messageBox) return;
@@ -818,6 +821,31 @@ async function initDashboardPage() {
     renderSelectedRoleTags('[data-dashboard-remove-selected]', selectedRemoveRoleIds);
   }
 
+  function updateGlobalchatPreview() {
+    if (!globalchatForm) return;
+    const select = $('[data-dashboard-globalchat-channel-select]');
+    const selected = dashboardChannels.find((channel) => String(channel.id) === String(select?.value || ''));
+    const preview = $('[data-dashboard-globalchat-preview]');
+    if (preview) preview.textContent = selected ? `#${selected.name}` : 'Kanal auswählen';
+  }
+
+  function renderGlobalchatConfig(data, channels) {
+    if (!globalchatForm) return;
+    const config = data.globalchat || {};
+    const channelSelect = $('[data-dashboard-globalchat-channel-select]');
+    if (channelSelect) channelSelect.innerHTML = '<option value="">Kanal auswählen</option>' + dashboardSelectOptions(channels, [config.channelId || config.channel_id].filter(Boolean));
+    const enabledInput = globalchatForm.querySelector('[name="globalchatEnabled"]');
+    if (enabledInput) enabledInput.checked = config.enabled !== false && Boolean(config.channelId || config.channel_id);
+    const status = $('[data-dashboard-globalchat-status]');
+    if (status) {
+      const active = Boolean(config.enabled !== false && (config.channelId || config.channel_id));
+      status.textContent = active ? 'Eingerichtet' : 'Nicht eingerichtet';
+      status.className = `chip ${active ? 'online' : ''}`;
+    }
+    globalchatDirty = false;
+    updateGlobalchatPreview();
+  }
+
   function renderGuildConfig(data) {
     selectedGuildData = data.guild;
     access = data.access || { checked: false, hasPremiumFooter: false };
@@ -825,6 +853,8 @@ async function initDashboardPage() {
     $('[data-dashboard-server-meta]').textContent = `${formatValue(selectedGuildData.memberCount)} Mitglieder · ${access.checked ? (access.canManage ? 'Administrator bestätigt' : 'Administrator benötigt') : 'Administrator wird geprüft'}`;
     const roles = (selectedGuildData.roles || []).filter((role) => !role.managed && !role.default).sort((a, b) => (b.position || 0) - (a.position || 0));
     const channels = (selectedGuildData.channels || []).filter((channel) => ['text', 'news', 'forum'].includes(channel.type));
+    const globalchatChannels = channels.filter((channel) => ['text', 'news'].includes(channel.type));
+    dashboardChannels = globalchatChannels;
     dashboardRoles = roles;
     selectedAddRoleIds = new Set((data.verification?.addRoleIds || data.verification?.role_ids || []).map(String));
     selectedRemoveRoleIds = new Set((data.verification?.removeRoleIds || data.verification?.remove_role_ids || []).map(String));
@@ -835,6 +865,7 @@ async function initDashboardPage() {
     if (logChannelSelect) {
       logChannelSelect.innerHTML = '<option value="">Kein Log-Kanal</option>' + dashboardSelectOptions(channels, [data.verification?.logChannelId || data.verification?.log_channel_id].filter(Boolean));
     }
+    renderGlobalchatConfig(data, globalchatChannels);
     if (data.verification?.mode) {
       const modeInput = form.querySelector(`[name="mode"][value="${data.verification.mode}"]`);
       if (modeInput) modeInput.checked = true;
@@ -913,6 +944,8 @@ async function initDashboardPage() {
 
   form?.addEventListener('input', () => { dashboardDirty = true; updateVerifyPreview(); });
   form?.addEventListener('change', () => { dashboardDirty = true; updateVerifyPreview(); });
+  globalchatForm?.addEventListener('input', () => { globalchatDirty = true; updateGlobalchatPreview(); });
+  globalchatForm?.addEventListener('change', () => { globalchatDirty = true; updateGlobalchatPreview(); });
   $('[data-dashboard-refresh]')?.addEventListener('click', async () => {
     if (selectedGuildId) await loadGuild(selectedGuildId);
   });
@@ -921,17 +954,49 @@ async function initDashboardPage() {
     button.addEventListener('click', () => {
       const section = button.dataset.dashboardSection;
       $$('[data-dashboard-section]').forEach((node) => node.classList.toggle('active', node === button));
-      if (section === 'verification') {
-        if (form) form.hidden = false;
+      if (form) form.hidden = section !== 'verification';
+      if (globalchatForm) globalchatForm.hidden = section !== 'globalchat';
+      if (section === 'verification' || section === 'globalchat') {
         if (soon) soon.hidden = true;
-      } else {
-        if (form) form.hidden = true;
-        if (soon) {
-          soon.hidden = false;
-          soon.querySelector('h3').textContent = `${button.querySelector('strong')?.textContent || 'Dieses System'} · Bald...`;
-        }
+      } else if (soon) {
+        soon.hidden = false;
+        soon.querySelector('h3').textContent = `${button.querySelector('strong')?.textContent || 'Dieses System'} · Bald...`;
       }
     });
+  });
+
+  async function submitGlobalchatConfig(enabledOverride = null) {
+    if (!selectedGuildId) return showDashboardMessage('Bitte wähle zuerst einen Server.', 'warn');
+    if (!globalchatForm) return;
+    const formData = new FormData(globalchatForm);
+    const enabled = enabledOverride === null ? formData.get('globalchatEnabled') === 'on' : Boolean(enabledOverride);
+    const payload = {
+      enabled,
+      channelId: enabled ? formData.get('globalchatChannelId') : null
+    };
+    if (enabled && !payload.channelId) return showDashboardMessage('Bitte wähle einen Globalchat-Kanal aus.', 'warn');
+    const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/globalchat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.ok) return showDashboardMessage(result.error || 'Globalchat konnte nicht gespeichert werden.', 'error');
+    globalchatDirty = false;
+    showDashboardMessage(enabled ? 'Globalchat wird vom Bot eingerichtet. Der Kanal bleibt gespeichert.' : 'Globalchat wird vom Bot deaktiviert.', 'success');
+  }
+
+  globalchatForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    await submitGlobalchatConfig(null);
+  });
+
+  $('[data-dashboard-globalchat-disable]')?.addEventListener('click', async () => {
+    if (globalchatForm) {
+      const enabledInput = globalchatForm.querySelector('[name="globalchatEnabled"]');
+      if (enabledInput) enabledInput.checked = false;
+    }
+    await submitGlobalchatConfig(false);
   });
 
   form?.addEventListener('submit', async (event) => {
