@@ -718,6 +718,7 @@ async function initDashboardPage() {
   const workspace = $('[data-dashboard-workspace]');
   const form = $('[data-dashboard-verify-form]');
   const globalchatForm = $('[data-dashboard-globalchat-form]');
+  const messagesForm = $('[data-dashboard-messages-form]');
   const soon = $('[data-dashboard-soon]');
   let selectedGuildId = null;
   let selectedGuildData = null;
@@ -730,6 +731,9 @@ async function initDashboardPage() {
   let dashboardServerAutoRefreshes = 0;
   let dashboardServerAutoRefreshTimer = null;
   let globalchatDirty = false;
+  let dashboardMessages = [];
+  let selectedDashboardMessageId = null;
+  let messagesDirty = false;
 
   function showDashboardMessage(text, type = 'info') {
     if (!messageBox) return;
@@ -848,6 +852,163 @@ async function initDashboardPage() {
     updateGlobalchatPreview();
   }
 
+
+  function emptyMessagePayload() {
+    return {
+      id: '',
+      name: '',
+      channelId: '',
+      embed: {
+        author: '',
+        authorImage: '',
+        title: '',
+        titleUrl: '',
+        description: '',
+        image: '',
+        thumbnail: '',
+        color: '#38bdf8',
+        footer: 'Powered by Blue ⚡'
+      }
+    };
+  }
+
+  function currentMessageFromForm() {
+    if (!messagesForm) return emptyMessagePayload();
+    const fd = new FormData(messagesForm);
+    return {
+      id: fd.get('messageId') || selectedDashboardMessageId || '',
+      name: fd.get('messageName') || '',
+      channelId: fd.get('messageChannelId') || '',
+      embed: {
+        author: fd.get('messageAuthor') || '',
+        authorImage: fd.get('messageAuthorImage') || '',
+        title: fd.get('messageTitle') || '',
+        titleUrl: fd.get('messageTitleUrl') || '',
+        description: fd.get('messageDescription') || '',
+        image: fd.get('messageImage') || '',
+        thumbnail: fd.get('messageThumbnail') || '',
+        color: fd.get('messageColor') || '#38bdf8',
+        footer: fd.get('messageFooter') || 'Powered by Blue ⚡'
+      }
+    };
+  }
+
+  function setMessageForm(message = null) {
+    if (!messagesForm) return;
+    const data = message || emptyMessagePayload();
+    selectedDashboardMessageId = data.id || null;
+    const embed = data.embed || {};
+    const set = (name, value) => {
+      const input = messagesForm.querySelector(`[name="${name}"]`);
+      if (input) input.value = value || '';
+    };
+    set('messageId', data.id || '');
+    set('messageName', data.name || '');
+    set('messageChannelId', data.channelId || '');
+    set('messageAuthor', embed.author || '');
+    set('messageAuthorImage', embed.authorImage || '');
+    set('messageTitle', embed.title || '');
+    set('messageTitleUrl', embed.titleUrl || '');
+    set('messageDescription', embed.description || '');
+    set('messageImage', embed.image || '');
+    set('messageThumbnail', embed.thumbnail || '');
+    set('messageColor', embed.color || '#38bdf8');
+    set('messageFooter', embed.footer || 'Powered by Blue ⚡');
+    const footerInput = $('[data-dashboard-message-footer-input]');
+    const footerNote = $('[data-dashboard-message-footer-note]');
+    if (footerInput) {
+      footerInput.disabled = !(access && access.hasPremiumFooter);
+      if (!(access && access.hasPremiumFooter)) footerInput.value = 'Powered by Blue ⚡';
+    }
+    if (footerNote) footerNote.textContent = access && access.hasPremiumFooter ? 'Blue Premium erkannt: Du darfst den Footer bearbeiten.' : 'Ohne Blue Premium auf dem Mainserver bleibt der Footer fest auf Powered by Blue ⚡.';
+    updateMessagePreview();
+  }
+
+  function renderDashboardMessagesList() {
+    const list = $('[data-dashboard-message-list]');
+    if (!list) return;
+    if (!dashboardMessages.length) {
+      list.innerHTML = '<p class="muted">Noch keine Message gespeichert.</p>';
+      return;
+    }
+    list.innerHTML = dashboardMessages.map((message) => {
+      const active = String(message.id) === String(selectedDashboardMessageId);
+      const channel = dashboardChannels.find((item) => String(item.id) === String(message.channelId));
+      return `<div class="dashboard-message-item ${active ? 'active' : ''}" data-message-item="${escapeHtml(message.id)}"><button type="button" class="message-item-main"><strong>${escapeHtml(message.name || 'Message')}</strong><small>${channel ? `#${escapeHtml(channel.name)}` : 'Kanal nicht gefunden'} · ${escapeHtml(message.status || 'saved')}</small></button><button type="button" class="message-item-delete" data-message-delete="${escapeHtml(message.id)}" aria-label="Message löschen">×</button></div>`;
+    }).join('');
+    $$('[data-message-item]', list).forEach((item) => {
+      item.querySelector('.message-item-main')?.addEventListener('click', () => {
+        const message = dashboardMessages.find((entry) => String(entry.id) === String(item.dataset.messageItem));
+        if (message) {
+          setMessageForm(message);
+          renderDashboardMessagesList();
+        }
+      });
+    });
+    $$('[data-message-delete]', list).forEach((button) => {
+      button.addEventListener('click', async (event) => {
+        event.stopPropagation();
+        if (!selectedGuildId) return;
+        const id = String(button.dataset.messageDelete || '');
+        if (!id) return;
+        if (!confirm('Diese gespeicherte Message wirklich löschen?')) return;
+        const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/messages/${encodeURIComponent(id)}`, { method: 'DELETE' });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result.ok) return showDashboardMessage(result.error || 'Message konnte nicht gelöscht werden.', 'error');
+        dashboardMessages = dashboardMessages.filter((message) => String(message.id) !== id);
+        if (String(selectedDashboardMessageId) === id) setMessageForm(null);
+        renderDashboardMessagesList();
+        showDashboardMessage('Message wurde aus der Liste gelöscht.', 'success');
+      });
+    });
+  }
+
+  function renderMessagesConfig(data, channels) {
+    if (!messagesForm) return;
+    dashboardMessages = (data.messages?.messages || data.messages || []).filter(Boolean);
+    const channelSelect = $('[data-dashboard-message-channel-select]');
+    if (channelSelect) channelSelect.innerHTML = '<option value="">Kanal auswählen</option>' + dashboardSelectOptions(channels, [dashboardMessages[0]?.channelId].filter(Boolean));
+    renderDashboardMessagesList();
+    const current = selectedDashboardMessageId ? dashboardMessages.find((message) => String(message.id) === String(selectedDashboardMessageId)) : null;
+    setMessageForm(current || dashboardMessages[0] || null);
+    messagesDirty = false;
+  }
+
+  function updateMessagePreview() {
+    if (!messagesForm) return;
+    const data = currentMessageFromForm();
+    const embed = data.embed || {};
+    const card = $('[data-message-preview-card]');
+    const author = $('[data-message-preview-author]');
+    const title = $('[data-message-preview-title]');
+    const description = $('[data-message-preview-description]');
+    const thumbnail = $('[data-message-preview-thumbnail]');
+    const image = $('[data-message-preview-image]');
+    const footer = $('[data-message-preview-footer]');
+    const color = embed.color || '#38bdf8';
+    if (card) card.style.borderLeftColor = color;
+    if (author) {
+      const authorImage = embed.authorImage ? `<img src="${escapeHtml(embed.authorImage)}" alt="">` : '';
+      author.innerHTML = embed.author ? `${authorImage}<span>${escapeHtml(embed.author)}</span>` : '';
+      author.hidden = !embed.author;
+    }
+    if (title) {
+      title.textContent = embed.title || 'Embed Titel';
+      title.href = embed.titleUrl || '#';
+      title.classList.toggle('muted-link', !embed.title);
+    }
+    if (description) description.textContent = embed.description || 'Embed Beschreibung';
+    if (thumbnail) {
+      thumbnail.hidden = !embed.thumbnail;
+      if (embed.thumbnail) thumbnail.src = embed.thumbnail;
+    }
+    if (image) {
+      image.hidden = !embed.image;
+      if (embed.image) image.src = embed.image;
+    }
+    if (footer) footer.textContent = embed.footer || 'Powered by Blue ⚡';
+  }
+
   function renderGuildConfig(data) {
     selectedGuildData = data.guild;
     access = data.access || { checked: false, hasPremiumFooter: false };
@@ -868,6 +1029,7 @@ async function initDashboardPage() {
       logChannelSelect.innerHTML = '<option value="">Kein Log-Kanal</option>' + dashboardSelectOptions(channels, [data.verification?.logChannelId || data.verification?.log_channel_id].filter(Boolean));
     }
     renderGlobalchatConfig(data, globalchatChannels);
+    renderMessagesConfig(data, globalchatChannels);
     if (data.verification?.mode) {
       const modeInput = form.querySelector(`[name="mode"][value="${data.verification.mode}"]`);
       if (modeInput) modeInput.checked = true;
@@ -955,6 +1117,8 @@ async function initDashboardPage() {
   form?.addEventListener('change', () => { dashboardDirty = true; updateVerifyPreview(); });
   globalchatForm?.addEventListener('input', () => { globalchatDirty = true; updateGlobalchatPreview(); });
   globalchatForm?.addEventListener('change', () => { globalchatDirty = true; updateGlobalchatPreview(); });
+  messagesForm?.addEventListener('input', () => { messagesDirty = true; updateMessagePreview(); });
+  messagesForm?.addEventListener('change', () => { messagesDirty = true; updateMessagePreview(); });
   $('[data-dashboard-refresh]')?.addEventListener('click', async () => {
     if (selectedGuildId) await loadGuild(selectedGuildId);
   });
@@ -965,13 +1129,48 @@ async function initDashboardPage() {
       $$('[data-dashboard-section]').forEach((node) => node.classList.toggle('active', node === button));
       if (form) form.hidden = section !== 'verification';
       if (globalchatForm) globalchatForm.hidden = section !== 'globalchat';
-      if (section === 'verification' || section === 'globalchat') {
+      if (messagesForm) messagesForm.hidden = section !== 'messages';
+      if (section === 'verification' || section === 'globalchat' || section === 'messages') {
         if (soon) soon.hidden = true;
       } else if (soon) {
         soon.hidden = false;
         soon.querySelector('h3').textContent = `${button.querySelector('strong')?.textContent || 'Dieses System'} · Bald...`;
       }
     });
+  });
+
+
+  function resetMessageBuilder() {
+    selectedDashboardMessageId = null;
+    setMessageForm(null);
+    renderDashboardMessagesList();
+  }
+
+  $('[data-dashboard-message-new]')?.addEventListener('click', resetMessageBuilder);
+  $('[data-dashboard-message-reset]')?.addEventListener('click', resetMessageBuilder);
+
+  messagesForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!selectedGuildId) return showDashboardMessage('Bitte wähle zuerst einen Server.', 'warn');
+    const payload = currentMessageFromForm();
+    if (!payload.name.trim()) return showDashboardMessage('Bitte gib der Message einen Namen.', 'warn');
+    if (!payload.channelId) return showDashboardMessage('Bitte wähle einen Kanal aus.', 'warn');
+    const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.ok) return showDashboardMessage(result.error || 'Message konnte nicht gesendet werden.', 'error');
+    const saved = result.message;
+    const index = dashboardMessages.findIndex((message) => String(message.id) === String(saved.id));
+    if (index >= 0) dashboardMessages[index] = saved;
+    else dashboardMessages.unshift(saved);
+    selectedDashboardMessageId = saved.id;
+    setMessageForm(saved);
+    renderDashboardMessagesList();
+    messagesDirty = false;
+    showDashboardMessage('Message wird vom Bot gesendet und bleibt gespeichert.', 'success');
   });
 
   async function submitGlobalchatConfig(enabledOverride = null) {
