@@ -46,6 +46,8 @@ const DASHBOARD_ACCESS_FILE = path.join(__dirname, 'data', 'dashboard-access-cac
 const DASHBOARD_ACCESS_LOOKUP_FILE = path.join(__dirname, 'data', 'dashboard-access-requests.json');
 const DASHBOARD_VERIFY_CONFIG_FILE = path.join(__dirname, 'data', 'dashboard-verify-configs.json');
 const DASHBOARD_VERIFY_ACTION_FILE = path.join(__dirname, 'data', 'dashboard-verify-actions.json');
+const DASHBOARD_GLOBALCHAT_CONFIG_FILE = path.join(__dirname, 'data', 'dashboard-globalchat-configs.json');
+const DASHBOARD_GLOBALCHAT_ACTION_FILE = path.join(__dirname, 'data', 'dashboard-globalchat-actions.json');
 fs.mkdirSync(TICKET_UPLOAD_DIR, { recursive: true });
 
 const ticketUploadStorage = multer.diskStorage({
@@ -723,6 +725,28 @@ function saveDashboardVerifyActions(data) {
   saveJson(DASHBOARD_VERIFY_ACTION_FILE, data);
 }
 
+function loadDashboardGlobalchatConfigs() {
+  const data = loadJson(DASHBOARD_GLOBALCHAT_CONFIG_FILE, { configs: {} });
+  if (!data.configs || typeof data.configs !== 'object') data.configs = {};
+  return data;
+}
+
+function saveDashboardGlobalchatConfigs(data) {
+  if (!data.configs || typeof data.configs !== 'object') data.configs = {};
+  saveJson(DASHBOARD_GLOBALCHAT_CONFIG_FILE, data);
+}
+
+function loadDashboardGlobalchatActions() {
+  const data = loadJson(DASHBOARD_GLOBALCHAT_ACTION_FILE, { actions: [] });
+  if (!Array.isArray(data.actions)) data.actions = [];
+  return data;
+}
+
+function saveDashboardGlobalchatActions(data) {
+  if (!Array.isArray(data.actions)) data.actions = [];
+  saveJson(DASHBOARD_GLOBALCHAT_ACTION_FILE, data);
+}
+
 function dashboardSanitizeText(value, maxLength = 1000) {
   return String(value || '').replace(/\r/g, '').trim().slice(0, maxLength);
 }
@@ -800,13 +824,59 @@ app.get('/api/dashboard/guild/:guildId', requireUser, (req, res) => {
   const common = dashboardCommonGuild(req, guildId);
   if (!common) return res.status(403).json({ ok: false, error: 'Nicht verfügbar - Administrator benötigt. Du brauchst Administratorrechte auf diesem Server.' });
   queueDashboardAccess(req.session.discordUser.id, guildId);
-  const configs = loadDashboardVerifyConfigs().configs;
+  const verifyConfigs = loadDashboardVerifyConfigs().configs;
+  const globalchatConfigs = loadDashboardGlobalchatConfigs().configs;
   res.json({
     ok: true,
     guild: common.botGuild,
     access: dashboardAccessFor(req.session.discordUser.id, guildId),
-    verification: configs[guildId] || null
+    verification: verifyConfigs[guildId] || null,
+    globalchat: globalchatConfigs[guildId] || common.botGuild.globalchat || null
   });
+});
+
+app.post('/api/dashboard/guild/:guildId/globalchat', requireUser, (req, res) => {
+  const guildId = String(req.params.guildId || '').replace(/\D/g, '');
+  const common = dashboardCommonGuild(req, guildId);
+  if (!common) return res.status(403).json({ ok: false, error: 'Nicht verfügbar - Administrator benötigt. Du brauchst Administratorrechte auf diesem Server.' });
+
+  const access = dashboardAccessFor(req.session.discordUser.id, guildId);
+  if (access.checked && access.canManage === false) return res.status(403).json({ ok: false, error: 'Der Bot konnte deine Administratorrechte auf diesem Server nicht bestätigen.' });
+
+  const botGuild = common.botGuild;
+  const availableChannelIds = new Set((botGuild.channels || []).filter((channel) => ['text', 'news'].includes(channel.type)).map((channel) => String(channel.id)));
+  const body = req.body || {};
+  const enabled = Boolean(body.enabled);
+  const channelId = String(body.channelId || '').replace(/\D/g, '');
+
+  if (enabled && !availableChannelIds.has(channelId)) {
+    return res.status(400).json({ ok: false, error: 'Bitte wähle einen gültigen Textkanal für den Globalchat.' });
+  }
+
+  const config = {
+    guildId,
+    enabled,
+    channelId: enabled ? channelId : null,
+    updatedBy: req.session.discordUser,
+    updatedAt: new Date().toISOString(),
+    status: 'pending_apply'
+  };
+
+  const configs = loadDashboardGlobalchatConfigs();
+  configs.configs[guildId] = config;
+  saveDashboardGlobalchatConfigs(configs);
+
+  const actions = loadDashboardGlobalchatActions();
+  actions.actions.push({
+    id: `globalchat_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
+    type: 'apply_globalchat_setup',
+    guildId,
+    config,
+    status: 'pending',
+    createdAt: new Date().toISOString()
+  });
+  saveDashboardGlobalchatActions(actions);
+  res.json({ ok: true, config, message: enabled ? 'Globalchat wird vom Bot eingerichtet.' : 'Globalchat wird vom Bot deaktiviert.' });
 });
 
 app.post('/api/dashboard/guild/:guildId/verification', requireUser, (req, res) => {
@@ -913,6 +983,35 @@ app.post('/api/dashboard/bot/access-cache', requireDashboardBot, (req, res) => {
   const requests = loadDashboardAccessRequests();
   delete requests.requests[`${userId}:${guildId}`];
   saveDashboardAccessRequests(requests);
+  res.json({ ok: true });
+});
+
+app.get('/api/dashboard/bot/globalchat-actions', requireDashboardBot, (_req, res) => {
+  const data = loadDashboardGlobalchatActions();
+  const actions = data.actions.filter((action) => action.status === 'pending');
+  res.json({ ok: true, actions });
+});
+
+app.post('/api/dashboard/bot/globalchat-action-result', requireDashboardBot, (req, res) => {
+  const id = String(req.body?.id || '');
+  const data = loadDashboardGlobalchatActions();
+  const action = data.actions.find((item) => item.id === id);
+  if (!action) return res.status(404).json({ ok: false, error: 'Action nicht gefunden.' });
+  action.status = req.body?.ok ? 'done' : 'error';
+  action.result = req.body || {};
+  action.finishedAt = new Date().toISOString();
+  saveDashboardGlobalchatActions(data);
+
+  if (action.type === 'apply_globalchat_setup' && action.guildId) {
+    const configs = loadDashboardGlobalchatConfigs();
+    if (configs.configs[action.guildId]) {
+      configs.configs[action.guildId].status = action.status;
+      configs.configs[action.guildId].lastResult = req.body;
+      configs.configs[action.guildId].channelId = req.body.channelId || configs.configs[action.guildId].channelId;
+      configs.configs[action.guildId].updatedAt = new Date().toISOString();
+      saveDashboardGlobalchatConfigs(configs);
+    }
+  }
   res.json({ ok: true });
 });
 

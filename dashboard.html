@@ -90,6 +90,7 @@
 
             <div class="dashboard-departments dashboard-departments-pro">
               <button class="dashboard-dept" type="button" data-dashboard-section="messages"><span>💬</span><strong>Messages</strong><small>Bald...</small></button>
+              <button class="dashboard-dept" type="button" data-dashboard-section="globalchat"><span>🌍</span><strong>Globalchat</strong><small>Öffnen</small></button>
               <button class="dashboard-dept" type="button" data-dashboard-section="moderation"><span>🛡️</span><strong>Moderation</strong><small>Bald...</small></button>
               <button class="dashboard-dept" type="button" data-dashboard-section="security"><span>🔒</span><strong>Security</strong><small>Bald...</small></button>
               <button class="dashboard-dept" type="button" data-dashboard-section="ticket"><span>🎫</span><strong>Ticket</strong><small>Bald...</small></button>
@@ -100,6 +101,38 @@
               <h3>Bald...</h3>
               <p>Diese Abteilung wird später im Dashboard freigeschaltet.</p>
             </div>
+
+            <form class="dashboard-globalchat-form dashboard-feature-form" data-dashboard-globalchat-form hidden>
+              <div class="verify-toolbar">
+                <div>
+                  <span class="eyebrow">Globalchat</span>
+                  <h3>Globalchat Setup</h3>
+                  <p>Wähle den Kanal, in dem der serverübergreifende Blue Globalchat aktiv sein soll.</p>
+                </div>
+                <span class="chip online" data-dashboard-globalchat-status>Nicht eingerichtet</span>
+              </div>
+
+              <div class="feature-setup-grid">
+                <section class="verify-config-card feature-primary-card">
+                  <span class="eyebrow">Kanal</span>
+                  <h3>Globalchat Kanal</h3>
+                  <label>Textkanal auswählen<select name="globalchatChannelId" data-dashboard-globalchat-channel-select></select><small>Nachrichten in diesem Kanal werden wie vorher über den Globalchat verteilt.</small></label>
+                  <label class="switch-line"><input type="checkbox" name="globalchatEnabled" checked><span>Globalchat auf diesem Server aktivieren</span></label>
+                  <div class="form-actions">
+                    <button class="btn primary" type="submit">Globalchat speichern</button>
+                    <button class="btn ghost" type="button" data-dashboard-globalchat-disable>Globalchat deaktivieren</button>
+                  </div>
+                </section>
+
+                <aside class="verify-preview-card feature-preview-card">
+                  <span class="eyebrow">Vorschau</span>
+                  <h3>🌍 Blue Globalchat</h3>
+                  <p>Der gewählte Kanal wird mit allen anderen eingerichteten Globalchat-Servern verbunden. Ränge, Embeds, Replies, Cooldowns und Globalchat-Bans laufen weiterhin über dein bestehendes Bot-System.</p>
+                  <div class="feature-preview-line"><strong>Kanal:</strong> <span data-dashboard-globalchat-preview>Kanal auswählen</span></div>
+                  <small>Powered by Blue ⚡</small>
+                </aside>
+              </div>
+            </form>
 
             <form class="dashboard-verify-form dashboard-verify-form-pro" data-dashboard-verify-form>
               <div class="verify-toolbar">
