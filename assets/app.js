@@ -741,13 +741,15 @@ async function initDashboardPage() {
   function renderServers(guilds) {
     if (!serverList) return;
     if (!guilds.length) {
-      serverList.innerHTML = '<p class="muted">Keine gemeinsamen verwaltbaren Server gefunden. Prüfe, ob du mit Discord eingeloggt bist, Blue auf dem Server ist und du Server verwalten darfst.</p>';
+      serverList.innerHTML = '<p class="muted">Keine gemeinsamen Server gefunden. Prüfe, ob du mit Discord eingeloggt bist und Blue auf dem Server ist.</p>';
       return;
     }
     serverList.innerHTML = guilds.map((guild) => {
       const icon = discordGuildIconUrl(guild);
       const initial = (guild.name || '?').slice(0, 1).toUpperCase();
-      return `<button class="dashboard-server-card" type="button" data-dashboard-guild="${escapeHtml(guild.id)}"><span class="server-icon">${icon ? `<img src="${escapeHtml(icon)}" alt="">` : escapeHtml(initial)}</span><span><strong>${escapeHtml(guild.name)}</strong><small>${formatValue(guild.memberCount)} Mitglieder</small></span></button>`;
+      const available = guild.available !== false;
+      const reason = guild.unavailableReason || 'Nicht verfügbar - Administrator benötigt';
+      return `<button class="dashboard-server-card ${available ? '' : 'disabled'}" type="button" data-dashboard-guild="${escapeHtml(guild.id)}" ${available ? '' : 'disabled aria-disabled="true"'}><span class="server-icon">${icon ? `<img src="${escapeHtml(icon)}" alt="">` : escapeHtml(initial)}</span><span><strong>${escapeHtml(guild.name)}</strong><small>${available ? `${formatValue(guild.memberCount)} Mitglieder` : escapeHtml(reason)}</small></span></button>`;
     }).join('');
   }
 
@@ -755,7 +757,7 @@ async function initDashboardPage() {
     selectedGuildData = data.guild;
     access = data.access || { checked: false, hasPremiumFooter: false };
     $('[data-dashboard-server-name]').textContent = selectedGuildData.name || 'Server';
-    $('[data-dashboard-server-meta]').textContent = `${formatValue(selectedGuildData.memberCount)} Mitglieder · ${access.checked ? (access.canManage ? 'Zugriff bestätigt' : 'Zugriff wird geprüft') : 'Zugriff wird geprüft'}`;
+    $('[data-dashboard-server-meta]').textContent = `${formatValue(selectedGuildData.memberCount)} Mitglieder · ${access.checked ? (access.canManage ? 'Administrator bestätigt' : 'Administrator benötigt') : 'Administrator wird geprüft'}`;
     const roles = (selectedGuildData.roles || []).filter((role) => !role.managed && !role.default).sort((a, b) => (b.position || 0) - (a.position || 0));
     const channels = (selectedGuildData.channels || []).filter((channel) => ['text', 'news', 'forum'].includes(channel.type));
     $('[data-dashboard-add-roles]').innerHTML = dashboardSelectOptions(roles, data.verification?.addRoleIds || data.verification?.role_ids || []);
@@ -765,6 +767,10 @@ async function initDashboardPage() {
       const modeInput = form.querySelector(`[name="mode"][value="${data.verification.mode}"]`);
       if (modeInput) modeInput.checked = true;
     }
+    const ageEnabled = form.querySelector('[name="minAccountAgeEnabled"]');
+    const ageDays = form.querySelector('[name="minAccountAgeDays"]');
+    if (ageEnabled) ageEnabled.checked = Boolean(data.verification?.minAccountAgeEnabled);
+    if (ageDays) ageDays.value = Number.isFinite(Number(data.verification?.minAccountAgeDays)) ? Number(data.verification.minAccountAgeDays) : 30;
     if (data.verification?.embed) {
       for (const [key, value] of Object.entries(data.verification.embed)) {
         const input = form.querySelector(`[name="${key}"]`);
@@ -866,6 +872,8 @@ async function initDashboardPage() {
       addRoleIds,
       removeRoleIds,
       channelId: formData.get('channelId'),
+      minAccountAgeEnabled: formData.get('minAccountAgeEnabled') === 'on',
+      minAccountAgeDays: Number.parseInt(formData.get('minAccountAgeDays'), 10) || 0,
       embed: {
         title: formData.get('title'),
         description: formData.get('description'),
