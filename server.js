@@ -26,7 +26,8 @@ const DISCORD_OAUTH_MIN_RETRY_SECONDS = Number(process.env.DISCORD_OAUTH_MIN_RET
 // Nur kurzer lokaler Schutz gegen Doppelklicks/Callback-Refresh.
 // Keine lange gespeicherte Sperre mehr, damit Logout -> späterer Login nicht fälschlich 30-60 Minuten blockiert.
 const DISCORD_OAUTH_FALLBACK_RETRY_SECONDS = Number(process.env.DISCORD_OAUTH_FALLBACK_RETRY_SECONDS || 60);
-const DISCORD_OAUTH_MAX_LOCAL_BLOCK_SECONDS = Number(process.env.DISCORD_OAUTH_MAX_LOCAL_BLOCK_SECONDS || 90);
+const DISCORD_OAUTH_MAX_LOCAL_BLOCK_SECONDS = Number(process.env.DISCORD_OAUTH_MAX_LOCAL_BLOCK_SECONDS || 10);
+const DISCORD_RELOGIN_CACHE_MS = Number(process.env.DISCORD_RELOGIN_CACHE_MS || (1000 * 60 * 60 * 24 * 7));
 const UNBAN_API_SECRET = process.env.UNBAN_API_SECRET || HEARTBEAT_SECRET || '';
 const UNBAN_APPLICATIONS_FILE = path.join(__dirname, 'data', 'unban-applications.json');
 const UNBAN_BAN_CACHE_FILE = path.join(__dirname, 'data', 'unban-ban-cache.json');
@@ -362,20 +363,31 @@ app.get('/auth/discord', (req, res) => {
 
   const returnTo = cleanReturnPath(req.query.return);
 
-  // Wenn die Session schon eingeloggt ist, niemals erneut Discord OAuth starten.
-  // Sonst kann ein wiederholter Klick auf Login unnötig Token-Anfragen verursachen.
+  // Wenn die Session schon aktiv ist, niemals erneut Discord OAuth starten.
   if (req.session.discordUser) {
     return res.redirect(returnTo);
   }
 
-  if (Date.now() < discordOAuthBlockedUntil) {
-    return res.status(429).send(discordOAuthRateLimitMessage());
+  // Professioneller Re-Login: Wenn der User sich gerade erst ausgeloggt hat,
+  // reaktivieren wir die bereits bestätigte Discord-Session lokal, statt Discord
+  // erneut mit OAuth Token-Requests zu belasten. Für Account-Wechsel: /auth/discord?force=1
+  const cachedUser = req.session.cachedDiscordUser || null;
+  const cachedAt = Number(req.session.cachedDiscordUserAt || 0);
+  const forceFreshOAuth = String(req.query.force || '') === '1';
+  if (!forceFreshOAuth && cachedUser && cachedAt && Date.now() - cachedAt < DISCORD_RELOGIN_CACHE_MS) {
+    req.session.discordUser = cachedUser;
+    req.session.discordGuilds = Array.isArray(req.session.cachedDiscordGuilds) ? req.session.cachedDiscordGuilds : [];
+    req.session.loggedOutAt = null;
+    delete req.session.oauthState;
+    delete req.session.discordRedirectUri;
+    delete req.session.oauthStartedAt;
+    return res.redirect(returnTo);
   }
 
   const now = Date.now();
   const lastStart = Number(req.session.oauthStartedAt || 0);
   if (lastStart && now - lastStart < DISCORD_OAUTH_MIN_RETRY_SECONDS * 1000) {
-    return res.status(429).send(`Discord Login wurde gerade erst gestartet. Bitte warte kurz und klicke nicht mehrfach auf Login.`);
+    return res.status(429).send('Discord Login wurde gerade erst gestartet. Bitte klicke nicht mehrfach auf Login.');
   }
 
   const state = crypto.randomUUID();
@@ -445,10 +457,17 @@ app.get('/auth/discord/callback', async (req, res) => {
       });
 
       if (tokenResponse.status === 429) {
-        const retryAfter = discordOAuthSetRateLimit(tokenResponse, text);
+        let retryAfter = Number(tokenResponse.headers.get('retry-after') || 0);
+        try {
+          const parsed = JSON.parse(text || '{}');
+          retryAfter = Number(parsed.retry_after || parsed.retryAfter || retryAfter || 0);
+        } catch {}
+        // Kein langer lokaler Block mehr. Wir melden nur Discords echte Antwort.
+        discordOAuthBlockedUntil = Date.now() + Math.min(Math.max(retryAfter || 5, 5), 10) * 1000;
+        const retryText = retryAfter ? ` Discord sagt retry_after: ${Math.ceil(retryAfter)} Sekunde(n).` : '';
         return res.status(429).send(
-          `Discord hat gerade OAuth-429 zurückgegeben. Ich blocke lokal nur kurz für ca. ${Math.ceil(retryAfter / 60)} Minute(n), ` +
-          'damit kein Doppelklick/Callback-Refresh gespammt wird. Danach kannst du es erneut versuchen.'
+          'Discord selbst hat gerade OAuth-429 zurückgegeben.' + retryText +
+          ' Wenn du dich gerade erst ausgeloggt hast, gehe zurück zur Website und klicke Login erneut; die Website nutzt dann deine gespeicherte lokale Session, statt Discord erneut zu fragen.'
         );
       }
 
@@ -495,6 +514,10 @@ app.get('/auth/discord/callback', async (req, res) => {
       avatar: user.avatar || null,
       discriminator: user.discriminator || '0'
     };
+    req.session.cachedDiscordUser = req.session.discordUser;
+    req.session.cachedDiscordGuilds = req.session.discordGuilds;
+    req.session.cachedDiscordUserAt = Date.now();
+    req.session.loggedOutAt = null;
     delete req.session.oauthState;
     delete req.session.discordRedirectUri;
     delete req.session.oauthStartedAt;
@@ -506,11 +529,35 @@ app.get('/auth/discord/callback', async (req, res) => {
 });
 
 app.post('/auth/logout', (req, res) => {
-  req.session.destroy(() => res.json({ ok: true }));
+  const fullLogout = req.query.full === '1' || req.body?.full === true || req.body?.full === '1';
+  if (fullLogout) {
+    return req.session.destroy(() => res.json({ ok: true, fullLogout: true }));
+  }
+
+  // Soft-Logout: Für die Website ist der User ausgeloggt, aber die bestätigte
+  // Discord-Session bleibt kurzzeitig lokal gespeichert. Dadurch funktioniert
+  // Logout -> 10 Minuten später wieder Login ohne neuen Discord OAuth-Request.
+  if (req.session.discordUser) {
+    req.session.cachedDiscordUser = req.session.discordUser;
+    req.session.cachedDiscordGuilds = req.session.discordGuilds || [];
+    req.session.cachedDiscordUserAt = Date.now();
+  }
+  delete req.session.discordUser;
+  delete req.session.discordGuilds;
+  delete req.session.oauthState;
+  delete req.session.discordRedirectUri;
+  delete req.session.oauthStartedAt;
+  req.session.loggedOutAt = Date.now();
+  return res.json({ ok: true, softLogout: true });
 });
 
 app.get('/api/auth/me', (req, res) => {
-  res.json({ ok: true, loggedIn: Boolean(req.session.discordUser), user: req.session.discordUser || null });
+  res.json({
+    ok: true,
+    loggedIn: Boolean(req.session.discordUser),
+    user: req.session.discordUser || null,
+    hasCachedLogin: Boolean(req.session.cachedDiscordUser && Number(req.session.cachedDiscordUserAt || 0) && Date.now() - Number(req.session.cachedDiscordUserAt || 0) < DISCORD_RELOGIN_CACHE_MS)
+  });
 });
 
 
