@@ -56,6 +56,27 @@ const ticketUpload = multer({
 });
 
 let lastHeartbeat = loadHeartbeatFromDisk();
+let discordOAuthBlockedUntil = 0;
+
+function discordOAuthRateLimitMessage() {
+  const waitSeconds = Math.max(1, Math.ceil((discordOAuthBlockedUntil - Date.now()) / 1000));
+  const waitText = waitSeconds >= 60 ? `${Math.ceil(waitSeconds / 60)} Minute(n)` : `${waitSeconds} Sekunde(n)`;
+  return `Discord blockiert OAuth-Logins gerade temporär wegen zu vieler Anfragen. Bitte warte ca. ${waitText} und versuche es dann erneut.`;
+}
+
+function discordOAuthSetRateLimit(response, bodyText = '') {
+  let retryAfter = Number(response.headers.get('retry-after') || 0);
+  if (!Number.isFinite(retryAfter) || retryAfter <= 0) {
+    try {
+      const parsed = JSON.parse(bodyText || '{}');
+      retryAfter = Number(parsed.retry_after || parsed.retryAfter || 0);
+    } catch {}
+  }
+  if (!Number.isFinite(retryAfter) || retryAfter <= 0) retryAfter = 15 * 60;
+  retryAfter = Math.min(Math.max(retryAfter, 60), 60 * 60);
+  discordOAuthBlockedUntil = Date.now() + retryAfter * 1000;
+  return retryAfter;
+}
 
 app.set('trust proxy', 1);
 app.use(cors());
@@ -282,6 +303,9 @@ app.get('/auth/discord', (req, res) => {
   if (!DISCORD_CLIENT_ID || !DISCORD_CLIENT_SECRET) {
     return res.status(500).send('Discord OAuth ist nicht konfiguriert. DISCORD_CLIENT_ID und DISCORD_CLIENT_SECRET fehlen.');
   }
+  if (Date.now() < discordOAuthBlockedUntil) {
+    return res.status(429).send(discordOAuthRateLimitMessage());
+  }
   const state = crypto.randomUUID();
   req.session.oauthState = state;
   req.session.returnTo = cleanReturnPath(req.query.return);
@@ -306,6 +330,10 @@ app.get('/auth/discord/callback', async (req, res) => {
 
     const redirectUri = req.session.discordRedirectUri || discordRedirectUri(req);
 
+    if (Date.now() < discordOAuthBlockedUntil) {
+      return res.status(429).send(discordOAuthRateLimitMessage());
+    }
+
     const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -323,8 +351,18 @@ app.get('/auth/discord/callback', async (req, res) => {
       console.warn('Discord OAuth Token Fehler:', {
         status: tokenResponse.status,
         redirectUri,
+        retryAfter: tokenResponse.headers.get('retry-after') || null,
         body: text.slice(0, 500)
       });
+
+      if (tokenResponse.status === 429) {
+        const retryAfter = discordOAuthSetRateLimit(tokenResponse, text);
+        return res.status(429).send(
+          `Discord OAuth ist gerade rate-limited. Bitte warte ca. ${Math.ceil(retryAfter / 60)} Minute(n), ` +
+          'ohne den Login erneut zu spammen, und versuche es danach erneut.'
+        );
+      }
+
       return res.status(502).send(
         'Discord Login fehlgeschlagen. Prüfe in Render DISCORD_CLIENT_SECRET und DISCORD_REDIRECT_URI. ' +
         'Benutzte Redirect URL: ' + redirectUri
