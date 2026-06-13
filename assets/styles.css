@@ -1848,3 +1848,38 @@ img,video,canvas{max-width:100%}
     border-radius:16px;
   }
 }
+
+
+/* Dashboard module feedback / confirmations */
+.module-feedback{
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+  padding:14px 16px;
+  margin:0 0 18px;
+  border:1px solid rgba(56,189,248,.22);
+  border-radius:18px;
+  background:linear-gradient(135deg,rgba(15,23,42,.88),rgba(15,23,42,.58));
+  box-shadow:0 18px 45px rgba(2,6,23,.28), inset 0 1px 0 rgba(255,255,255,.06);
+  color:#e5f6ff;
+}
+.module-feedback[hidden]{display:none!important}
+.module-feedback strong{display:block;font-size:.96rem;line-height:1.35}
+.module-feedback small{display:block;margin-top:3px;color:#9fb4d1;font-size:.78rem}
+.module-feedback-icon{
+  width:34px;height:34px;display:grid;place-items:center;flex:0 0 auto;
+  border-radius:12px;background:rgba(56,189,248,.14);border:1px solid rgba(56,189,248,.24);
+}
+.module-feedback.success{border-color:rgba(34,197,94,.35);background:linear-gradient(135deg,rgba(22,101,52,.28),rgba(15,23,42,.72))}
+.module-feedback.success .module-feedback-icon{background:rgba(34,197,94,.16);border-color:rgba(34,197,94,.35)}
+.module-feedback.error{border-color:rgba(248,113,113,.42);background:linear-gradient(135deg,rgba(127,29,29,.25),rgba(15,23,42,.76))}
+.module-feedback.error .module-feedback-icon{background:rgba(248,113,113,.14);border-color:rgba(248,113,113,.38)}
+.module-feedback.warn{border-color:rgba(250,204,21,.42);background:linear-gradient(135deg,rgba(113,63,18,.25),rgba(15,23,42,.76))}
+.module-feedback.warn .module-feedback-icon{background:rgba(250,204,21,.14);border-color:rgba(250,204,21,.38)}
+
+.ticket-category-description-label{margin-top:12px;display:block}
+.ticket-category-description-label textarea{min-height:72px;resize:vertical}
+.dashboard-ticket-preview-categories p{margin:5px 0 6px;color:#b6c6e3;font-size:.86rem;line-height:1.45}
+.ticket-category-builder{position:relative;overflow:hidden}
+.ticket-category-builder::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:linear-gradient(180deg,var(--blue),var(--cyan));opacity:.75}
+.ticket-category-builder>*{position:relative}

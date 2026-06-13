@@ -750,6 +750,20 @@ async function initDashboardPage() {
     if (messageBox) messageBox.hidden = true;
   }
 
+  function showModuleFeedback(section, text, type = 'success') {
+    const box = $(`[data-module-feedback="${section}"]`);
+    if (!box) return;
+    box.hidden = false;
+    box.className = `module-feedback ${type}`;
+    const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : type === 'warn' ? '⚠️' : 'ℹ️';
+    box.innerHTML = `<span class="module-feedback-icon">${icon}</span><div><strong>${escapeHtml(text)}</strong><small>${type === 'success' ? 'Änderung wurde angenommen und wird vom Blue Bot verarbeitet.' : 'Bitte prüfe deine Eingaben.'}</small></div>`;
+  }
+
+  function dashboardNotify(section, text, type = 'success') {
+    showDashboardMessage(text, type);
+    if (section) showModuleFeedback(section, text, type);
+  }
+
   function setWorkspaceVisible(visible) {
     if (empty) empty.hidden = visible;
     if (workspace) workspace.hidden = !visible;
@@ -857,7 +871,7 @@ async function initDashboardPage() {
   }
 
   function emptyTicketCategory(index = 0) {
-    return { id: `cat_${index + 1}`, name: '', roleIds: [] };
+    return { id: `cat_${index + 1}`, name: '', description: '', roleIds: [] };
   }
 
   function normalizeTicketCategories(categories) {
@@ -865,6 +879,7 @@ async function initDashboardPage() {
     const cleaned = list.slice(0, 5).map((category, index) => ({
       id: category.id || `cat_${index + 1}`,
       name: category.name || '',
+      description: category.description || '',
       roleIds: Array.isArray(category.roleIds || category.role_ids) ? (category.roleIds || category.role_ids).map(String) : [],
     }));
     return cleaned.length ? cleaned : [emptyTicketCategory(0)];
@@ -889,7 +904,8 @@ async function initDashboardPage() {
     if (categoriesPreview) {
       const rows = ticketCategories.filter((category) => category.name.trim()).map((category) => {
         const roleNames = dashboardRoles.filter((role) => (category.roleIds || []).map(String).includes(String(role.id))).map((role) => `@${role.name}`);
-        return `<div><strong>${escapeHtml(category.name)}</strong><small>${roleNames.length ? escapeHtml(roleNames.join(', ')) : 'Keine Team-Rolle gewählt'}</small></div>`;
+        const desc = String(category.description || '').trim();
+        return `<div><strong>${escapeHtml(category.name)}</strong>${desc ? `<p>${escapeHtml(desc)}</p>` : ''}<small>${roleNames.length ? escapeHtml(roleNames.join(', ')) : 'Keine Team-Rolle gewählt'}</small></div>`;
       });
       categoriesPreview.innerHTML = rows.length ? rows.join('') : '<p class="muted compact">Noch keine Kategorie eingerichtet.</p>';
     }
@@ -946,6 +962,7 @@ async function initDashboardPage() {
           <label>Kategorie Name<input data-ticket-category-name="${index}" maxlength="50" value="${escapeHtml(category.name || '')}" placeholder="z. B. Allgemeiner Support"></label>
           <button class="btn ghost danger-lite" type="button" data-ticket-category-remove="${index}" ${ticketCategories.length <= 1 ? 'disabled' : ''}>Entfernen</button>
         </div>
+        <label class="ticket-category-description-label">Kategorie Beschreibung<textarea data-ticket-category-description="${index}" maxlength="100" rows="2" placeholder="Kurze Beschreibung, z. B. Fragen, Hilfe und allgemeine Anliegen.">${escapeHtml(category.description || '')}</textarea><small>Wird im Ticket-Menü und im Panel angezeigt.</small></label>
         <div class="role-picker-title"><strong>Team-Rollen</strong><small>Diese Rollen sehen und bearbeiten Tickets dieser Kategorie.</small></div>
         <div class="dashboard-role-picker" data-ticket-role-picker="${index}"></div>
         <div class="selected-role-tags" data-ticket-role-selected="${index}"></div>
@@ -955,6 +972,14 @@ async function initDashboardPage() {
       input.addEventListener('input', () => {
         const index = Number.parseInt(input.dataset.ticketCategoryName, 10);
         if (ticketCategories[index]) ticketCategories[index].name = input.value;
+        ticketDirty = true;
+        updateTicketPreview();
+      });
+    });
+    $$('[data-ticket-category-description]', list).forEach((input) => {
+      input.addEventListener('input', () => {
+        const index = Number.parseInt(input.dataset.ticketCategoryDescription, 10);
+        if (ticketCategories[index]) ticketCategories[index].description = input.value;
         ticketDirty = true;
         updateTicketPreview();
       });
@@ -1096,11 +1121,11 @@ async function initDashboardPage() {
         if (!confirm('Diese gespeicherte Message wirklich löschen?')) return;
         const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/messages/${encodeURIComponent(id)}`, { method: 'DELETE' });
         const result = await response.json().catch(() => ({}));
-        if (!response.ok || !result.ok) return showDashboardMessage(result.error || 'Message konnte nicht gelöscht werden.', 'error');
+        if (!response.ok || !result.ok) return dashboardNotify('messages', result.error || 'Message konnte nicht gelöscht werden.', 'error');
         dashboardMessages = dashboardMessages.filter((message) => String(message.id) !== id);
         if (String(selectedDashboardMessageId) === id) setMessageForm(null);
         renderDashboardMessagesList();
-        showDashboardMessage('Message wurde aus der Liste gelöscht.', 'success');
+        dashboardNotify('messages', 'Message wurde gelöscht und bleibt entfernt.', 'success');
       });
     });
   }
@@ -1311,7 +1336,7 @@ async function initDashboardPage() {
 
 
   $('[data-dashboard-ticket-add-category]')?.addEventListener('click', () => {
-    if (ticketCategories.length >= 5) return showDashboardMessage('Maximal 5 Ticket-Kategorien sind möglich.', 'warn');
+    if (ticketCategories.length >= 5) return dashboardNotify('ticket', 'Maximal 5 Ticket-Kategorien sind möglich.', 'warn');
     ticketCategories.push(emptyTicketCategory(ticketCategories.length));
     ticketDirty = true;
     renderTicketCategoryRows();
@@ -1319,32 +1344,33 @@ async function initDashboardPage() {
 
   ticketForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
-    if (!selectedGuildId) return showDashboardMessage('Bitte wähle zuerst einen Server.', 'warn');
+    if (!selectedGuildId) return dashboardNotify(null, 'Bitte wähle zuerst einen Server.', 'warn');
     const formData = new FormData(ticketForm);
     const categories = ticketCategories.map((category, index) => ({
       id: `cat_${index + 1}`,
       name: (category.name || '').trim(),
+      description: (category.description || '').trim(),
       roleIds: Array.from(new Set((category.roleIds || []).map(String)))
     })).filter((category) => category.name);
-    if (!categories.length) return showDashboardMessage('Bitte erstelle mindestens eine Ticket-Kategorie.', 'warn');
-    if (categories.some((category) => !category.roleIds.length)) return showDashboardMessage('Jede Ticket-Kategorie braucht mindestens eine Team-Rolle.', 'warn');
+    if (!categories.length) return dashboardNotify('ticket', 'Bitte erstelle mindestens eine Ticket-Kategorie.', 'warn');
+    if (categories.some((category) => !category.roleIds.length)) return dashboardNotify('ticket', 'Jede Ticket-Kategorie braucht mindestens eine Team-Rolle.', 'warn');
     const payload = {
       panelChannelId: formData.get('ticketPanelChannelId'),
       ticketCategoryId: formData.get('ticketCategoryId'),
       logChannelId: formData.get('ticketLogChannelId'),
       categories
     };
-    if (!payload.panelChannelId || !payload.ticketCategoryId || !payload.logChannelId) return showDashboardMessage('Bitte wähle Panel-Kanal, Ticket-Kategorie und Log-Kanal aus.', 'warn');
+    if (!payload.panelChannelId || !payload.ticketCategoryId || !payload.logChannelId) return dashboardNotify('ticket', 'Bitte wähle Panel-Kanal, Ticket-Kategorie und Log-Kanal aus.', 'warn');
     const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/ticket`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
     const result = await response.json().catch(() => ({}));
-    if (!response.ok || !result.ok) return showDashboardMessage(result.error || 'Ticket-System konnte nicht gespeichert werden.', 'error');
+    if (!response.ok || !result.ok) return dashboardNotify('ticket', result.error || 'Ticket-System konnte nicht gespeichert werden.', 'error');
     ticketDirty = false;
     if (result.config) renderTicketConfig({ ticket: result.config }, dashboardChannels, dashboardCategoryChannels);
-    showDashboardMessage('Ticket-System wird vom Bot eingerichtet und das Panel wird gesendet/aktualisiert.', 'success');
+    dashboardNotify('ticket', 'Ticket-System gespeichert. Blue sendet/aktualisiert jetzt das Panel.', 'success');
   });
 
   function resetMessageBuilder() {
@@ -1358,17 +1384,17 @@ async function initDashboardPage() {
 
   messagesForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
-    if (!selectedGuildId) return showDashboardMessage('Bitte wähle zuerst einen Server.', 'warn');
+    if (!selectedGuildId) return dashboardNotify(null, 'Bitte wähle zuerst einen Server.', 'warn');
     const payload = currentMessageFromForm();
-    if (!payload.name.trim()) return showDashboardMessage('Bitte gib der Message einen Namen.', 'warn');
-    if (!payload.channelId) return showDashboardMessage('Bitte wähle einen Kanal aus.', 'warn');
+    if (!payload.name.trim()) return dashboardNotify('messages', 'Bitte gib der Message einen Namen.', 'warn');
+    if (!payload.channelId) return dashboardNotify('messages', 'Bitte wähle einen Kanal aus.', 'warn');
     const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
     const result = await response.json().catch(() => ({}));
-    if (!response.ok || !result.ok) return showDashboardMessage(result.error || 'Message konnte nicht gesendet werden.', 'error');
+    if (!response.ok || !result.ok) return dashboardNotify('messages', result.error || 'Message konnte nicht gesendet werden.', 'error');
     const saved = result.message;
     const index = dashboardMessages.findIndex((message) => String(message.id) === String(saved.id));
     if (index >= 0) dashboardMessages[index] = saved;
@@ -1377,11 +1403,11 @@ async function initDashboardPage() {
     setMessageForm(saved);
     renderDashboardMessagesList();
     messagesDirty = false;
-    showDashboardMessage('Message wird vom Bot gesendet und bleibt gespeichert.', 'success');
+    dashboardNotify('messages', 'Message gespeichert und an den Bot zum Senden übergeben.', 'success');
   });
 
   async function submitGlobalchatConfig(enabledOverride = null) {
-    if (!selectedGuildId) return showDashboardMessage('Bitte wähle zuerst einen Server.', 'warn');
+    if (!selectedGuildId) return dashboardNotify(null, 'Bitte wähle zuerst einen Server.', 'warn');
     if (!globalchatForm) return;
     const formData = new FormData(globalchatForm);
     const enabled = enabledOverride === null ? formData.get('globalchatEnabled') === 'on' : Boolean(enabledOverride);
@@ -1389,16 +1415,16 @@ async function initDashboardPage() {
       enabled,
       channelId: enabled ? formData.get('globalchatChannelId') : null
     };
-    if (enabled && !payload.channelId) return showDashboardMessage('Bitte wähle einen Globalchat-Kanal aus.', 'warn');
+    if (enabled && !payload.channelId) return dashboardNotify('globalchat', 'Bitte wähle einen Globalchat-Kanal aus.', 'warn');
     const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/globalchat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
     const result = await response.json().catch(() => ({}));
-    if (!response.ok || !result.ok) return showDashboardMessage(result.error || 'Globalchat konnte nicht gespeichert werden.', 'error');
+    if (!response.ok || !result.ok) return dashboardNotify('globalchat', result.error || 'Globalchat konnte nicht gespeichert werden.', 'error');
     globalchatDirty = false;
-    showDashboardMessage(enabled ? 'Globalchat wird vom Bot eingerichtet. Der Kanal bleibt gespeichert.' : 'Globalchat wird vom Bot deaktiviert.', 'success');
+    dashboardNotify('globalchat', enabled ? 'Globalchat gespeichert. Blue richtet den Kanal jetzt ein.' : 'Globalchat-Deaktivierung gespeichert. Blue entfernt die Verbindung jetzt.', 'success');
   }
 
   globalchatForm?.addEventListener('submit', async (event) => {
@@ -1416,11 +1442,11 @@ async function initDashboardPage() {
 
   form?.addEventListener('submit', async (event) => {
     event.preventDefault();
-    if (!selectedGuildId) return showDashboardMessage('Bitte wähle zuerst einen Server.', 'warn');
+    if (!selectedGuildId) return dashboardNotify(null, 'Bitte wähle zuerst einen Server.', 'warn');
     const formData = new FormData(form);
     const addRoleIds = Array.from(selectedAddRoleIds);
     const removeRoleIds = Array.from(selectedRemoveRoleIds);
-    if (!addRoleIds.length) return showDashboardMessage('Bitte wähle mindestens eine Rolle zum Hinzufügen aus.', 'warn');
+    if (!addRoleIds.length) return dashboardNotify('verification', 'Bitte wähle mindestens eine Rolle zum Hinzufügen aus.', 'warn');
     const payload = {
       mode: formData.get('mode'),
       addRoleIds,
@@ -1444,9 +1470,9 @@ async function initDashboardPage() {
       body: JSON.stringify(payload)
     });
     const result = await response.json().catch(() => ({}));
-    if (!response.ok || !result.ok) return showDashboardMessage(result.error || 'Verify Panel konnte nicht gespeichert werden.', 'error');
+    if (!response.ok || !result.ok) return dashboardNotify('verification', result.error || 'Verify Panel konnte nicht gespeichert werden.', 'error');
     dashboardDirty = false;
-    showDashboardMessage('Verify Panel wird vom Bot gesendet. Deine Auswahl bleibt sichtbar.', 'success');
+    dashboardNotify('verification', 'Verification gespeichert. Blue sendet/aktualisiert jetzt das Panel.', 'success');
   });
 
   await loadDashboard();
