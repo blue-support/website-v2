@@ -60,6 +60,8 @@ const DASHBOARD_TICKET_CONFIG_FILE = path.join(DATA_DIR, 'dashboard-ticket-confi
 const DASHBOARD_TICKET_ACTION_FILE = path.join(DATA_DIR, 'dashboard-ticket-actions.json');
 const DASHBOARD_MODERATION_CONFIG_FILE = path.join(DATA_DIR, 'dashboard-moderation-configs.json');
 const DASHBOARD_MODERATION_ACTION_FILE = path.join(DATA_DIR, 'dashboard-moderation-actions.json');
+const DASHBOARD_FUN_CONFIG_FILE = path.join(DATA_DIR, 'dashboard-fun-configs.json');
+const DASHBOARD_FUN_ACTION_FILE = path.join(DATA_DIR, 'dashboard-fun-actions.json');
 fs.mkdirSync(TICKET_UPLOAD_DIR, { recursive: true });
 
 const ticketUploadStorage = multer.diskStorage({
@@ -844,6 +846,56 @@ function saveDashboardModerationActions(data) {
   saveJson(DASHBOARD_MODERATION_ACTION_FILE, data);
 }
 
+
+function loadDashboardFunConfigs() {
+  const data = loadJson(DASHBOARD_FUN_CONFIG_FILE, { configs: {} });
+  if (!data.configs || typeof data.configs !== 'object') data.configs = {};
+  return data;
+}
+
+function saveDashboardFunConfigs(data) {
+  if (!data.configs || typeof data.configs !== 'object') data.configs = {};
+  saveJson(DASHBOARD_FUN_CONFIG_FILE, data);
+}
+
+function loadDashboardFunActions() {
+  const data = loadJson(DASHBOARD_FUN_ACTION_FILE, { actions: [] });
+  if (!Array.isArray(data.actions)) data.actions = [];
+  return data;
+}
+
+function saveDashboardFunActions(data) {
+  if (!Array.isArray(data.actions)) data.actions = [];
+  saveJson(DASHBOARD_FUN_ACTION_FILE, data);
+}
+
+function dashboardPublicFunConfig(config) {
+  if (!config || typeof config !== 'object') return null;
+  const counting = config.counting || {};
+  const errate = config.errate || {};
+  const anonym = config.anonym || {};
+  return {
+    guildId: String(config.guildId || ''),
+    counting: {
+      enabled: Boolean(counting.enabled),
+      channelId: counting.channelId ? String(counting.channelId) : '',
+      currentNumber: Number.isFinite(Number(counting.currentNumber)) ? Number(counting.currentNumber) : 1,
+    },
+    errate: {
+      enabled: Boolean(errate.enabled),
+      channelId: errate.channelId ? String(errate.channelId) : '',
+    },
+    anonym: {
+      enabled: Boolean(anonym.enabled),
+      channelId: anonym.channelId ? String(anonym.channelId) : '',
+      logChannelId: anonym.logChannelId ? String(anonym.logChannelId) : '',
+    },
+    status: config.status || 'saved',
+    lastResult: config.lastResult || null,
+    updatedAt: config.updatedAt || null,
+  };
+}
+
 const DASHBOARD_MODERATION_COMMANDS = ['ban', 'unban', 'kick', 'mute', 'unmute', 'warn', 'unwarn', 'warnings'];
 
 function dashboardPublicModerationConfig(config) {
@@ -1031,6 +1083,7 @@ app.get('/api/dashboard/guild/:guildId', requireUser, (req, res) => {
   const messagesConfigs = loadDashboardMessagesConfigs().guilds;
   const ticketConfigs = loadDashboardTicketConfigs().configs;
   const moderationConfigs = loadDashboardModerationConfigs().configs;
+  const funConfigs = loadDashboardFunConfigs().configs;
   res.json({
     ok: true,
     guild: common.botGuild,
@@ -1039,12 +1092,72 @@ app.get('/api/dashboard/guild/:guildId', requireUser, (req, res) => {
     globalchat: globalchatConfigs[guildId] || common.botGuild.globalchat || null,
     ticket: dashboardPublicTicketConfig(ticketConfigs[guildId] || common.botGuild.ticket || null),
     moderation: dashboardPublicModerationConfig(moderationConfigs[guildId] || common.botGuild.moderation || null),
+    fun: dashboardPublicFunConfig(funConfigs[guildId] || common.botGuild.fun || null),
     messages: { messages: (messagesConfigs[guildId]?.messages || []).map(dashboardPublicMessage).filter(Boolean) }
   });
 });
 
 
 
+
+
+app.post('/api/dashboard/guild/:guildId/fun', requireUser, (req, res) => {
+  const guildId = String(req.params.guildId || '').replace(/\D/g, '');
+  const common = dashboardCommonGuild(req, guildId);
+  if (!common) return res.status(403).json({ ok: false, error: 'Nicht verfügbar - Administrator benötigt. Du brauchst Administratorrechte auf diesem Server.' });
+
+  const access = dashboardAccessFor(req.session.discordUser.id, guildId);
+  if (access.checked && access.canManage === false) return res.status(403).json({ ok: false, error: 'Der Bot konnte deine Administratorrechte auf diesem Server nicht bestätigen.' });
+
+  const botGuild = common.botGuild;
+  const availableChannelIds = new Set((botGuild.channels || []).filter((channel) => ['text', 'news'].includes(channel.type)).map((channel) => String(channel.id)));
+  const body = req.body || {};
+
+  function cleanChannel(value) {
+    return String(value || '').replace(/\D/g, '');
+  }
+
+  const countingEnabled = Boolean(body.counting?.enabled ?? body.countingEnabled);
+  const errateEnabled = Boolean(body.errate?.enabled ?? body.errateEnabled);
+  const anonymEnabled = Boolean(body.anonym?.enabled ?? body.anonymEnabled);
+
+  const countingChannelId = cleanChannel(body.counting?.channelId ?? body.countingChannelId);
+  const errateChannelId = cleanChannel(body.errate?.channelId ?? body.errateChannelId);
+  const anonymChannelId = cleanChannel(body.anonym?.channelId ?? body.anonymChannelId);
+  const anonymLogChannelId = cleanChannel(body.anonym?.logChannelId ?? body.anonymLogChannelId);
+
+  if (countingEnabled && !availableChannelIds.has(countingChannelId)) return res.status(400).json({ ok: false, error: 'Bitte wähle einen gültigen Counting-Kanal.' });
+  if (errateEnabled && !availableChannelIds.has(errateChannelId)) return res.status(400).json({ ok: false, error: 'Bitte wähle einen gültigen Errate-Zahl-Kanal.' });
+  if (anonymEnabled && !availableChannelIds.has(anonymChannelId)) return res.status(400).json({ ok: false, error: 'Bitte wähle einen gültigen Anonym-Chat-Kanal.' });
+  if (anonymLogChannelId && !availableChannelIds.has(anonymLogChannelId)) return res.status(400).json({ ok: false, error: 'Bitte wähle einen gültigen Anonym-Log-Kanal oder lasse ihn leer.' });
+
+  const config = {
+    guildId,
+    counting: { enabled: countingEnabled, channelId: countingEnabled ? countingChannelId : null },
+    errate: { enabled: errateEnabled, channelId: errateEnabled ? errateChannelId : null },
+    anonym: { enabled: anonymEnabled, channelId: anonymEnabled ? anonymChannelId : null, logChannelId: anonymEnabled && anonymLogChannelId ? anonymLogChannelId : null },
+    updatedBy: req.session.discordUser,
+    updatedAt: new Date().toISOString(),
+    status: 'pending_apply',
+  };
+
+  const configs = loadDashboardFunConfigs();
+  configs.configs[guildId] = config;
+  saveDashboardFunConfigs(configs);
+
+  const actions = loadDashboardFunActions();
+  actions.actions.push({
+    id: `fun_${Date.now()}_${crypto.randomUUID()}`,
+    type: 'apply_fun_setup',
+    guildId,
+    config,
+    status: 'pending',
+    createdAt: new Date().toISOString(),
+  });
+  saveDashboardFunActions(actions);
+
+  res.json({ ok: true, config: dashboardPublicFunConfig(config) });
+});
 
 app.post('/api/dashboard/guild/:guildId/moderation', requireUser, (req, res) => {
   const guildId = String(req.params.guildId || '').replace(/\D/g, '');
@@ -1440,6 +1553,38 @@ app.post('/api/dashboard/bot/access-cache', requireDashboardBot, (req, res) => {
 
 
 
+
+app.get('/api/dashboard/bot/fun-actions', requireDashboardBot, (_req, res) => {
+  const data = loadDashboardFunActions();
+  const actions = data.actions.filter((action) => action.status === 'pending');
+  res.json({ ok: true, actions });
+});
+
+app.post('/api/dashboard/bot/fun-action-result', requireDashboardBot, (req, res) => {
+  const id = String(req.body?.id || '');
+  const data = loadDashboardFunActions();
+  const action = data.actions.find((item) => item.id === id);
+  if (!action) return res.status(404).json({ ok: false, error: 'Action nicht gefunden.' });
+  action.status = req.body?.ok ? 'done' : 'error';
+  action.result = req.body || {};
+  action.finishedAt = new Date().toISOString();
+  saveDashboardFunActions(data);
+
+  if (action.type === 'apply_fun_setup' && action.guildId) {
+    const configs = loadDashboardFunConfigs();
+    if (configs.configs[action.guildId]) {
+      configs.configs[action.guildId].status = action.status;
+      configs.configs[action.guildId].lastResult = req.body;
+      if (req.body.fun) {
+        configs.configs[action.guildId] = { ...configs.configs[action.guildId], ...req.body.fun, status: action.status, lastResult: req.body };
+      }
+      configs.configs[action.guildId].updatedAt = new Date().toISOString();
+      saveDashboardFunConfigs(configs);
+    }
+  }
+  res.json({ ok: true });
+});
+
 app.get('/api/dashboard/bot/moderation-actions', requireDashboardBot, (_req, res) => {
   const data = loadDashboardModerationActions();
   const actions = data.actions.filter((action) => action.status === 'pending');
@@ -1596,12 +1741,14 @@ app.post('/api/dashboard/bot/saved-configs', requireDashboardBot, (req, res) => 
   const messagesConfigs = req.body?.messagesConfigs && typeof req.body.messagesConfigs === 'object' ? req.body.messagesConfigs : {};
   const ticketConfigs = req.body?.ticketConfigs && typeof req.body.ticketConfigs === 'object' ? req.body.ticketConfigs : {};
   const moderationConfigs = req.body?.moderationConfigs && typeof req.body.moderationConfigs === 'object' ? req.body.moderationConfigs : {};
+  const funConfigs = req.body?.funConfigs && typeof req.body.funConfigs === 'object' ? req.body.funConfigs : {};
 
   let verifyCount = 0;
   let globalchatCount = 0;
   let messagesCount = 0;
   let ticketCount = 0;
   let moderationCount = 0;
+  let funCount = 0;
 
   if (Object.keys(verifyConfigs).length) {
     const data = loadDashboardVerifyConfigs();
@@ -1732,7 +1879,26 @@ app.post('/api/dashboard/bot/saved-configs', requireDashboardBot, (req, res) => 
     saveDashboardModerationConfigs(data);
   }
 
-  res.json({ ok: true, verifyCount, globalchatCount, messagesCount, ticketCount, moderationCount });
+
+  if (Object.keys(funConfigs).length) {
+    const data = loadDashboardFunConfigs();
+    for (const [guildIdRaw, configRaw] of Object.entries(funConfigs)) {
+      const guildId = String(guildIdRaw || '').replace(/\D/g, '');
+      if (!guildId || !configRaw || typeof configRaw !== 'object') continue;
+      data.configs[guildId] = {
+        ...(data.configs[guildId] || {}),
+        ...configRaw,
+        guildId,
+        restoredFromBot: true,
+        status: configRaw.status || data.configs[guildId]?.status || 'done',
+        updatedAt: configRaw.updatedAt || data.configs[guildId]?.updatedAt || new Date().toISOString(),
+      };
+      funCount += 1;
+    }
+    saveDashboardFunConfigs(data);
+  }
+
+  res.json({ ok: true, verifyCount, globalchatCount, messagesCount, ticketCount, moderationCount, funCount });
 });
 
 function loadApplications() {

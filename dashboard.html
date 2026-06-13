@@ -92,6 +92,7 @@
               <button class="dashboard-dept" type="button" data-dashboard-section="messages"><span>💬</span><strong>Messages</strong><small>Öffnen</small></button>
               <button class="dashboard-dept" type="button" data-dashboard-section="globalchat"><span>🌍</span><strong>Globalchat</strong><small>Öffnen</small></button>
               <button class="dashboard-dept" type="button" data-dashboard-section="moderation"><span>🛡️</span><strong>Moderation</strong><small>Öffnen</small></button>
+              <button class="dashboard-dept" type="button" data-dashboard-section="fun"><span>🎮</span><strong>Fun</strong><small>Öffnen</small></button>
               <button class="dashboard-dept" type="button" data-dashboard-section="security"><span>🔒</span><strong>Security</strong><small>Bald...</small></button>
               <button class="dashboard-dept" type="button" data-dashboard-section="ticket"><span>🎫</span><strong>Ticket</strong><small>Öffnen</small></button>
               <button class="dashboard-dept active" type="button" data-dashboard-section="verification"><span>✅</span><strong>Verification</strong><small>Öffnen</small></button>
@@ -246,6 +247,57 @@
 
               <div class="form-actions sticky-actions">
                 <button class="btn primary" type="submit">Moderation speichern</button>
+              </div>
+            </form>
+
+
+            <form class="dashboard-fun-form dashboard-feature-form" data-dashboard-fun-form hidden>
+              <div class="verify-toolbar">
+                <div>
+                  <span class="eyebrow">Fun</span>
+                  <h3>Fun Systeme</h3>
+                  <p>Richte Counting, Errate-Zahl und Anonym-Chat direkt im Dashboard ein. Die alten Setup-Commands werden nicht mehr benötigt.</p>
+                </div>
+                <span class="chip" data-dashboard-fun-status>Nicht eingerichtet</span>
+              </div>
+
+              <div class="module-feedback" data-module-feedback="fun" hidden></div>
+
+              <div class="feature-setup-grid fun-layout-grid">
+                <section class="verify-config-card feature-primary-card fun-config-card">
+                  <span class="eyebrow">Kanäle</span>
+                  <h3>Setup</h3>
+
+                  <article class="fun-system-card">
+                    <label class="switch-line"><input type="checkbox" name="countingEnabled"><span>Counting aktivieren</span></label>
+                    <label>Counting Kanal<select name="countingChannelId" data-dashboard-fun-counting-channel><option value="">Kanal auswählen</option></select><small>Ersetzt /setup-counting.</small></label>
+                  </article>
+
+                  <article class="fun-system-card">
+                    <label class="switch-line"><input type="checkbox" name="errateEnabled"><span>Errate-Zahl aktivieren</span></label>
+                    <label>Errate-Zahl Kanal<select name="errateChannelId" data-dashboard-fun-errate-channel><option value="">Kanal auswählen</option></select><small>Ersetzt /setup-errate-zahl. Zielzahl wird vom Bot automatisch gesetzt.</small></label>
+                  </article>
+
+                  <article class="fun-system-card premium-glow-soft">
+                    <label class="switch-line"><input type="checkbox" name="anonymEnabled"><span>Anonym-Chat aktivieren</span></label>
+                    <label>Anonym-Chat Kanal<select name="anonymChannelId" data-dashboard-fun-anonym-channel><option value="">Kanal auswählen</option></select><small>Ersetzt /setup-anonymchat. User schreiben weiter über /send-anonym-message.</small></label>
+                    <label>Anonym-Log Kanal <small>(optional)</small><select name="anonymLogChannelId" data-dashboard-fun-anonym-log-channel><option value="">Kein Log-Kanal</option></select></label>
+                  </article>
+                </section>
+
+                <aside class="verify-preview-card feature-preview-card fun-preview-card">
+                  <span class="eyebrow">Übersicht</span>
+                  <h3>🎮 Fun Module</h3>
+                  <p>Aktiviere nur die Systeme, die auf diesem Server laufen sollen.</p>
+                  <div class="feature-preview-line"><strong>Counting:</strong> <span data-dashboard-fun-counting-preview>Nicht eingerichtet</span></div>
+                  <div class="feature-preview-line"><strong>Errate-Zahl:</strong> <span data-dashboard-fun-errate-preview>Nicht eingerichtet</span></div>
+                  <div class="feature-preview-line"><strong>Anonym-Chat:</strong> <span data-dashboard-fun-anonym-preview>Nicht eingerichtet</span></div>
+                  <small>Anonym-Chat bleibt wie vorher ein Premium-System.</small>
+                </aside>
+              </div>
+
+              <div class="form-actions sticky-actions">
+                <button class="btn primary" type="submit">Fun Systeme speichern</button>
               </div>
             </form>
 
