@@ -1706,7 +1706,7 @@ async function initDashboardPage() {
       channelsPreview.textContent = names.length ? names.join(', ') : 'Keine';
     }
     const languageEnabledPreview = $('[data-dashboard-security-language-enabled-preview]');
-    if (languageEnabledPreview) languageEnabledPreview.textContent = languageEnabled ? 'Aktiv · andere Sprachen werden blockiert' : 'Nicht aktiv';
+    if (languageEnabledPreview) languageEnabledPreview.textContent = languageEnabled ? 'Aktiv · andere Sprachen werden direkt blockiert' : 'Nicht aktiv';
     const languagePreview = $('[data-dashboard-security-language-preview]');
     if (languagePreview) languagePreview.textContent = dashboardSecurityLanguageLabels[lang] || lang.toUpperCase();
     const languageRolesPreview = $('[data-dashboard-security-language-roles-preview]');
