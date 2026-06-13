@@ -93,6 +93,7 @@
               <button class="dashboard-dept" type="button" data-dashboard-section="globalchat"><span>🌍</span><strong>Globalchat</strong><small>Öffnen</small></button>
               <button class="dashboard-dept" type="button" data-dashboard-section="moderation"><span>🛡️</span><strong>Moderation</strong><small>Öffnen</small></button>
               <button class="dashboard-dept" type="button" data-dashboard-section="fun"><span>🎮</span><strong>Fun</strong><small>Öffnen</small></button>
+              <button class="dashboard-dept" type="button" data-dashboard-section="community"><span>👥</span><strong>Community</strong><small>Öffnen</small></button>
               <button class="dashboard-dept" type="button" data-dashboard-section="security"><span>🔒</span><strong>Security</strong><small>Bald...</small></button>
               <button class="dashboard-dept" type="button" data-dashboard-section="ticket"><span>🎫</span><strong>Ticket</strong><small>Öffnen</small></button>
               <button class="dashboard-dept active" type="button" data-dashboard-section="verification"><span>✅</span><strong>Verification</strong><small>Öffnen</small></button>
@@ -298,6 +299,53 @@
 
               <div class="form-actions sticky-actions">
                 <button class="btn primary" type="submit">Fun Systeme speichern</button>
+              </div>
+            </form>
+
+
+
+            <form class="dashboard-community-form dashboard-feature-form" data-dashboard-community-form hidden>
+              <div class="verify-toolbar">
+                <div>
+                  <span class="eyebrow">Community</span>
+                  <h3>Teamlist Setup</h3>
+                  <p>Richte die automatische Teamliste direkt über das Dashboard ein. Eine Rolle ist Pflicht, bis zu 10 Rollen sind möglich.</p>
+                </div>
+                <span class="chip" data-dashboard-community-status>Nicht eingerichtet</span>
+              </div>
+
+              <div class="module-feedback" data-module-feedback="community" hidden></div>
+
+              <div class="feature-setup-grid community-layout-grid">
+                <section class="verify-config-card feature-primary-card community-config-card">
+                  <span class="eyebrow">Teamlist</span>
+                  <h3>Kanal & Rollen</h3>
+                  <label>Teamlist Kanal<select name="communityTeamlistChannelId" data-dashboard-community-channel><option value="">Kanal auswählen</option></select><small>Ersetzt /setup-teamlist. Hier wird die Teamliste gesendet und automatisch aktualisiert.</small></label>
+
+                  <div class="role-picker-title">
+                    <div>
+                      <span class="eyebrow">Rollen</span>
+                      <h3>Teamrollen wählen</h3>
+                    </div>
+                    <span class="mini-counter" data-dashboard-community-role-count>0/10</span>
+                  </div>
+                  <p class="muted compact">Klicke auf Rollen, um sie zur Teamliste hinzuzufügen. Die erste Rolle ist Pflicht, weitere 2–10 sind optional.</p>
+                  <div class="role-chip-grid community-role-picker" data-dashboard-community-role-picker></div>
+                  <div class="selected-role-box community-selected-roles" data-dashboard-community-selected><span class="muted">Keine Rolle gewählt</span></div>
+                </section>
+
+                <aside class="verify-preview-card feature-preview-card community-preview-card">
+                  <span class="eyebrow">Vorschau</span>
+                  <h3>👥 Unser Serverteam</h3>
+                  <p>Blue sortiert Mitglieder automatisch nach der höchsten ausgewählten Rolle und aktualisiert die Teamliste bei Rollenänderungen.</p>
+                  <div class="feature-preview-line"><strong>Kanal:</strong> <span data-dashboard-community-channel-preview>Kanal auswählen</span></div>
+                  <div class="dashboard-community-preview-roles" data-dashboard-community-preview-roles><p class="muted compact">Noch keine Rollen gewählt.</p></div>
+                  <small>Powered by Blue ⚡</small>
+                </aside>
+              </div>
+
+              <div class="form-actions sticky-actions">
+                <button class="btn primary" type="submit">Community speichern & Teamliste senden</button>
               </div>
             </form>
 
