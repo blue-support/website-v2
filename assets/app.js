@@ -762,6 +762,60 @@ async function initDashboardPage() {
   let selectedDashboardMessageId = null;
   let messagesDirty = false;
 
+  const moduleFeedbackTimers = new Map();
+
+  function dashboardNoticeIcon(type = 'info') {
+    if (type === 'success') return '✅';
+    if (type === 'error') return '❌';
+    if (type === 'warn') return '⚠️';
+    return 'ℹ️';
+  }
+
+  function dashboardNoticeSubtext(type = 'info') {
+    if (type === 'success') return 'Erledigt · Änderung wurde gespeichert oder an Blue übergeben.';
+    if (type === 'error') return 'Fehler · Bitte prüfe die Eingaben oder versuche es erneut.';
+    if (type === 'warn') return 'Hinweis · Es fehlt noch etwas.';
+    return 'Info · Dashboard wurde aktualisiert.';
+  }
+
+  function ensureDashboardToastStack() {
+    let stack = document.querySelector('[data-dashboard-toast-stack]');
+    if (!stack) {
+      stack = document.createElement('div');
+      stack.className = 'dashboard-toast-stack';
+      stack.setAttribute('data-dashboard-toast-stack', '');
+      stack.setAttribute('aria-live', 'polite');
+      stack.setAttribute('aria-atomic', 'false');
+      document.body.appendChild(stack);
+    }
+    return stack;
+  }
+
+  function showDashboardToast(text, type = 'info') {
+    const stack = ensureDashboardToastStack();
+    const toast = document.createElement('div');
+    toast.className = `dashboard-toast ${type}`;
+    toast.innerHTML = `
+      <span class="dashboard-toast-icon">${dashboardNoticeIcon(type)}</span>
+      <div class="dashboard-toast-copy">
+        <strong>${escapeHtml(text)}</strong>
+        <small>${escapeHtml(dashboardNoticeSubtext(type))}</small>
+      </div>
+      <button class="dashboard-toast-close" type="button" aria-label="Meldung schließen">×</button>
+      <span class="dashboard-toast-progress" aria-hidden="true"></span>
+    `;
+
+    const close = () => {
+      toast.classList.add('is-leaving');
+      window.setTimeout(() => toast.remove(), 220);
+    };
+
+    toast.querySelector('.dashboard-toast-close')?.addEventListener('click', close);
+    stack.appendChild(toast);
+    window.requestAnimationFrame(() => toast.classList.add('is-visible'));
+    window.setTimeout(close, 5000);
+  }
+
   function showDashboardMessage(text, type = 'info') {
     if (!messageBox) return;
     messageBox.hidden = false;
@@ -778,11 +832,18 @@ async function initDashboardPage() {
     if (!box) return;
     box.hidden = false;
     box.className = `module-feedback ${type}`;
-    const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : type === 'warn' ? '⚠️' : 'ℹ️';
-    box.innerHTML = `<span class="module-feedback-icon">${icon}</span><div><strong>${escapeHtml(text)}</strong><small>${type === 'success' ? 'Änderung wurde angenommen und wird vom Blue Bot verarbeitet.' : 'Bitte prüfe deine Eingaben.'}</small></div>`;
+    box.innerHTML = `<span class="module-feedback-icon">${dashboardNoticeIcon(type)}</span><div><strong>${escapeHtml(text)}</strong><small>${escapeHtml(dashboardNoticeSubtext(type))}</small></div>`;
+
+    const oldTimer = moduleFeedbackTimers.get(section);
+    if (oldTimer) window.clearTimeout(oldTimer);
+    moduleFeedbackTimers.set(section, window.setTimeout(() => {
+      box.hidden = true;
+      moduleFeedbackTimers.delete(section);
+    }, 5000));
   }
 
   function dashboardNotify(section, text, type = 'success') {
+    showDashboardToast(text, type);
     showDashboardMessage(text, type);
     if (section) showModuleFeedback(section, text, type);
   }
