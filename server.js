@@ -58,6 +58,8 @@ const DASHBOARD_MESSAGES_CONFIG_FILE = path.join(DATA_DIR, 'dashboard-messages-c
 const DASHBOARD_MESSAGES_ACTION_FILE = path.join(DATA_DIR, 'dashboard-messages-actions.json');
 const DASHBOARD_TICKET_CONFIG_FILE = path.join(DATA_DIR, 'dashboard-ticket-configs.json');
 const DASHBOARD_TICKET_ACTION_FILE = path.join(DATA_DIR, 'dashboard-ticket-actions.json');
+const DASHBOARD_MODERATION_CONFIG_FILE = path.join(DATA_DIR, 'dashboard-moderation-configs.json');
+const DASHBOARD_MODERATION_ACTION_FILE = path.join(DATA_DIR, 'dashboard-moderation-actions.json');
 fs.mkdirSync(TICKET_UPLOAD_DIR, { recursive: true });
 
 const ticketUploadStorage = multer.diskStorage({
@@ -820,6 +822,45 @@ function saveDashboardTicketActions(data) {
   saveJson(DASHBOARD_TICKET_ACTION_FILE, data);
 }
 
+function loadDashboardModerationConfigs() {
+  const data = loadJson(DASHBOARD_MODERATION_CONFIG_FILE, { configs: {} });
+  if (!data.configs || typeof data.configs !== 'object') data.configs = {};
+  return data;
+}
+
+function saveDashboardModerationConfigs(data) {
+  if (!data.configs || typeof data.configs !== 'object') data.configs = {};
+  saveJson(DASHBOARD_MODERATION_CONFIG_FILE, data);
+}
+
+function loadDashboardModerationActions() {
+  const data = loadJson(DASHBOARD_MODERATION_ACTION_FILE, { actions: [] });
+  if (!Array.isArray(data.actions)) data.actions = [];
+  return data;
+}
+
+function saveDashboardModerationActions(data) {
+  if (!Array.isArray(data.actions)) data.actions = [];
+  saveJson(DASHBOARD_MODERATION_ACTION_FILE, data);
+}
+
+const DASHBOARD_MODERATION_COMMANDS = ['ban', 'unban', 'kick', 'mute', 'unmute', 'warn', 'unwarn', 'warnings'];
+
+function dashboardPublicModerationConfig(config) {
+  if (!config || typeof config !== 'object') return null;
+  return {
+    guildId: String(config.guildId || ''),
+    logChannelId: config.logChannelId ? String(config.logChannelId) : '',
+    rolePermissions: Array.isArray(config.rolePermissions) ? config.rolePermissions.map((entry) => ({
+      roleId: String(entry.roleId || ''),
+      commands: Array.isArray(entry.commands) ? entry.commands.filter((cmd) => DASHBOARD_MODERATION_COMMANDS.includes(String(cmd))).map(String) : []
+    })).filter((entry) => entry.roleId && entry.commands.length) : [],
+    status: config.status || 'saved',
+    lastResult: config.lastResult || null,
+    updatedAt: config.updatedAt || null,
+  };
+}
+
 function dashboardPublicTicketConfig(config) {
   if (!config || typeof config !== 'object') return null;
   return {
@@ -989,6 +1030,7 @@ app.get('/api/dashboard/guild/:guildId', requireUser, (req, res) => {
   const globalchatConfigs = loadDashboardGlobalchatConfigs().configs;
   const messagesConfigs = loadDashboardMessagesConfigs().guilds;
   const ticketConfigs = loadDashboardTicketConfigs().configs;
+  const moderationConfigs = loadDashboardModerationConfigs().configs;
   res.json({
     ok: true,
     guild: common.botGuild,
@@ -996,11 +1038,69 @@ app.get('/api/dashboard/guild/:guildId', requireUser, (req, res) => {
     verification: verifyConfigs[guildId] || null,
     globalchat: globalchatConfigs[guildId] || common.botGuild.globalchat || null,
     ticket: dashboardPublicTicketConfig(ticketConfigs[guildId] || common.botGuild.ticket || null),
+    moderation: dashboardPublicModerationConfig(moderationConfigs[guildId] || common.botGuild.moderation || null),
     messages: { messages: (messagesConfigs[guildId]?.messages || []).map(dashboardPublicMessage).filter(Boolean) }
   });
 });
 
 
+
+
+app.post('/api/dashboard/guild/:guildId/moderation', requireUser, (req, res) => {
+  const guildId = String(req.params.guildId || '').replace(/\D/g, '');
+  const common = dashboardCommonGuild(req, guildId);
+  if (!common) return res.status(403).json({ ok: false, error: 'Nicht verfügbar - Administrator benötigt. Du brauchst Administratorrechte auf diesem Server.' });
+
+  const access = dashboardAccessFor(req.session.discordUser.id, guildId);
+  if (access.checked && access.canManage === false) return res.status(403).json({ ok: false, error: 'Der Bot konnte deine Administratorrechte auf diesem Server nicht bestätigen.' });
+
+  const botGuild = common.botGuild;
+  const availableRoleIds = new Set((botGuild.roles || []).filter((role) => !role.managed && !role.default).map((role) => String(role.id)));
+  const availableChannelIds = new Set((botGuild.channels || []).filter((channel) => ['text', 'news'].includes(channel.type)).map((channel) => String(channel.id)));
+  const body = req.body || {};
+  const logChannelId = String(body.logChannelId || '').replace(/\D/g, '');
+
+  if (logChannelId && !availableChannelIds.has(logChannelId)) {
+    return res.status(400).json({ ok: false, error: 'Bitte wähle einen gültigen Moderations-Log-Kanal.' });
+  }
+
+  const seenRoles = new Set();
+  const rolePermissions = [];
+  for (const raw of Array.isArray(body.rolePermissions) ? body.rolePermissions.slice(0, 5) : []) {
+    const roleId = String(raw?.roleId || '').replace(/\D/g, '');
+    if (!roleId || seenRoles.has(roleId) || !availableRoleIds.has(roleId)) continue;
+    const commands = Array.from(new Set((Array.isArray(raw?.commands) ? raw.commands : []).map(String).filter((cmd) => DASHBOARD_MODERATION_COMMANDS.includes(cmd))));
+    if (!commands.length) continue;
+    rolePermissions.push({ roleId, commands });
+    seenRoles.add(roleId);
+  }
+
+  const config = {
+    guildId,
+    logChannelId: logChannelId || null,
+    rolePermissions,
+    updatedBy: req.session.discordUser,
+    updatedAt: new Date().toISOString(),
+    status: 'pending_apply'
+  };
+
+  const configs = loadDashboardModerationConfigs();
+  configs.configs[guildId] = config;
+  saveDashboardModerationConfigs(configs);
+
+  const actions = loadDashboardModerationActions();
+  actions.actions.push({
+    id: `moderation_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
+    type: 'apply_moderation_setup',
+    guildId,
+    config,
+    status: 'pending',
+    createdAt: new Date().toISOString()
+  });
+  saveDashboardModerationActions(actions);
+
+  res.json({ ok: true, config: dashboardPublicModerationConfig(config), message: 'Moderation-System wird vom Bot eingerichtet.' });
+});
 
 app.post('/api/dashboard/guild/:guildId/ticket', requireUser, (req, res) => {
   const guildId = String(req.params.guildId || '').replace(/\D/g, '');
@@ -1339,6 +1439,36 @@ app.post('/api/dashboard/bot/access-cache', requireDashboardBot, (req, res) => {
 
 
 
+
+app.get('/api/dashboard/bot/moderation-actions', requireDashboardBot, (_req, res) => {
+  const data = loadDashboardModerationActions();
+  const actions = data.actions.filter((action) => action.status === 'pending');
+  res.json({ ok: true, actions });
+});
+
+app.post('/api/dashboard/bot/moderation-action-result', requireDashboardBot, (req, res) => {
+  const id = String(req.body?.id || '');
+  const data = loadDashboardModerationActions();
+  const action = data.actions.find((item) => item.id === id);
+  if (!action) return res.status(404).json({ ok: false, error: 'Action nicht gefunden.' });
+  action.status = req.body?.ok ? 'done' : 'error';
+  action.result = req.body || {};
+  action.finishedAt = new Date().toISOString();
+  saveDashboardModerationActions(data);
+
+  if (action.type === 'apply_moderation_setup' && action.guildId) {
+    const configs = loadDashboardModerationConfigs();
+    if (configs.configs[action.guildId]) {
+      configs.configs[action.guildId].status = action.status;
+      configs.configs[action.guildId].lastResult = req.body;
+      configs.configs[action.guildId].logChannelId = req.body.logChannelId || configs.configs[action.guildId].logChannelId || null;
+      configs.configs[action.guildId].updatedAt = new Date().toISOString();
+      saveDashboardModerationConfigs(configs);
+    }
+  }
+  res.json({ ok: true });
+});
+
 app.get('/api/dashboard/bot/ticket-actions', requireDashboardBot, (_req, res) => {
   const data = loadDashboardTicketActions();
   const actions = data.actions.filter((action) => action.status === 'pending');
@@ -1465,11 +1595,13 @@ app.post('/api/dashboard/bot/saved-configs', requireDashboardBot, (req, res) => 
   const globalchatConfigs = req.body?.globalchatConfigs && typeof req.body.globalchatConfigs === 'object' ? req.body.globalchatConfigs : {};
   const messagesConfigs = req.body?.messagesConfigs && typeof req.body.messagesConfigs === 'object' ? req.body.messagesConfigs : {};
   const ticketConfigs = req.body?.ticketConfigs && typeof req.body.ticketConfigs === 'object' ? req.body.ticketConfigs : {};
+  const moderationConfigs = req.body?.moderationConfigs && typeof req.body.moderationConfigs === 'object' ? req.body.moderationConfigs : {};
 
   let verifyCount = 0;
   let globalchatCount = 0;
   let messagesCount = 0;
   let ticketCount = 0;
+  let moderationCount = 0;
 
   if (Object.keys(verifyConfigs).length) {
     const data = loadDashboardVerifyConfigs();
@@ -1581,7 +1713,26 @@ app.post('/api/dashboard/bot/saved-configs', requireDashboardBot, (req, res) => 
     saveDashboardMessagesConfigs(data);
   }
 
-  res.json({ ok: true, verifyCount, globalchatCount, messagesCount, ticketCount });
+
+  if (Object.keys(moderationConfigs).length) {
+    const data = loadDashboardModerationConfigs();
+    for (const [guildIdRaw, configRaw] of Object.entries(moderationConfigs)) {
+      const guildId = String(guildIdRaw || '').replace(/\D/g, '');
+      if (!guildId || !configRaw || typeof configRaw !== 'object') continue;
+      data.configs[guildId] = {
+        ...(data.configs[guildId] || {}),
+        ...configRaw,
+        guildId,
+        restoredFromBot: true,
+        status: configRaw.status || data.configs[guildId]?.status || 'done',
+        updatedAt: configRaw.updatedAt || data.configs[guildId]?.updatedAt || new Date().toISOString()
+      };
+      moderationCount += 1;
+    }
+    saveDashboardModerationConfigs(data);
+  }
+
+  res.json({ ok: true, verifyCount, globalchatCount, messagesCount, ticketCount, moderationCount });
 });
 
 function loadApplications() {

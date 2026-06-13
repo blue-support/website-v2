@@ -91,7 +91,7 @@
             <div class="dashboard-departments dashboard-departments-pro">
               <button class="dashboard-dept" type="button" data-dashboard-section="messages"><span>💬</span><strong>Messages</strong><small>Öffnen</small></button>
               <button class="dashboard-dept" type="button" data-dashboard-section="globalchat"><span>🌍</span><strong>Globalchat</strong><small>Öffnen</small></button>
-              <button class="dashboard-dept" type="button" data-dashboard-section="moderation"><span>🛡️</span><strong>Moderation</strong><small>Bald...</small></button>
+              <button class="dashboard-dept" type="button" data-dashboard-section="moderation"><span>🛡️</span><strong>Moderation</strong><small>Öffnen</small></button>
               <button class="dashboard-dept" type="button" data-dashboard-section="security"><span>🔒</span><strong>Security</strong><small>Bald...</small></button>
               <button class="dashboard-dept" type="button" data-dashboard-section="ticket"><span>🎫</span><strong>Ticket</strong><small>Öffnen</small></button>
               <button class="dashboard-dept active" type="button" data-dashboard-section="verification"><span>✅</span><strong>Verification</strong><small>Öffnen</small></button>
@@ -206,6 +206,46 @@
                   <div class="feature-preview-line"><strong>Kanal:</strong> <span data-dashboard-globalchat-preview>Kanal auswählen</span></div>
                   <small>Powered by Blue ⚡</small>
                 </aside>
+              </div>
+            </form>
+
+
+            <form class="dashboard-moderation-form dashboard-feature-form" data-dashboard-moderation-form hidden>
+              <div class="verify-toolbar">
+                <div>
+                  <span class="eyebrow">Moderation</span>
+                  <h3>Moderation Setup</h3>
+                  <p>Lege genau fest, welche Rollen welche Moderationscommands nutzen dürfen. Ohne eingerichtete Rolle kann niemand Mod-Commands verwenden.</p>
+                </div>
+                <span class="chip" data-dashboard-moderation-status>Nicht eingerichtet</span>
+              </div>
+
+              <div class="module-feedback" data-module-feedback="moderation" hidden></div>
+
+              <div class="feature-setup-grid moderation-layout-grid">
+                <section class="verify-config-card feature-primary-card moderation-config-card">
+                  <span class="eyebrow">Mod-Rollen</span>
+                  <h3>Command Rechte</h3>
+                  <p class="muted compact">Bis zu 5 Rollen. Jede Rolle kann eigene Commands bekommen, z. B. Rolle 1: Ban/Mute, Rolle 2: Kick/Warn.</p>
+                  <label>Moderations-Log Channel<select name="moderationLogChannelId" data-dashboard-moderation-log-channel><option value="">Kein Log-Kanal</option></select><small>Ban, Unban, Kick, Mute, Unmute, Warn und Unwarn werden dort geloggt.</small></label>
+                  <div class="dashboard-moderation-role-list" data-dashboard-moderation-role-list></div>
+                  <div class="form-actions">
+                    <button class="btn ghost" type="button" data-dashboard-moderation-add-role>Rolle hinzufügen</button>
+                  </div>
+                </section>
+
+                <aside class="verify-preview-card feature-preview-card moderation-preview-card">
+                  <span class="eyebrow">Vorschau</span>
+                  <h3>🛡️ Mod Control</h3>
+                  <p>Diese Rollen bekommen Zugriff auf die ausgewählten Moderationscommands. Nicht konfigurierte Rollen werden blockiert.</p>
+                  <div class="feature-preview-line"><strong>Log:</strong> <span data-dashboard-moderation-log-preview>Kein Log-Kanal</span></div>
+                  <div class="dashboard-moderation-preview-list" data-dashboard-moderation-preview><p class="muted compact">Noch keine Mod-Rollen eingerichtet.</p></div>
+                  <small>Powered by Blue ⚡</small>
+                </aside>
+              </div>
+
+              <div class="form-actions sticky-actions">
+                <button class="btn primary" type="submit">Moderation speichern</button>
               </div>
             </form>
 
