@@ -830,6 +830,7 @@ function dashboardPublicTicketConfig(config) {
     categories: Array.isArray(config.categories) ? config.categories.map((category, index) => ({
       id: String(category.id || `cat_${index + 1}`),
       name: String(category.name || '').slice(0, 50),
+      description: String(category.description || '').slice(0, 100),
       roleIds: Array.isArray(category.roleIds || category.role_ids) ? (category.roleIds || category.role_ids).map(String) : [],
     })).filter((category) => category.name) : [],
     panelMessageId: config.panelMessageId ? String(config.panelMessageId) : null,
@@ -1027,12 +1028,14 @@ app.post('/api/dashboard/guild/:guildId/ticket', requireUser, (req, res) => {
   const categories = [];
   rawCategories.slice(0, 5).forEach((category) => {
     const name = dashboardSanitizeText(category?.name, 50);
+    const description = dashboardSanitizeText(category?.description, 100);
     if (!name) return;
     const categoryRoleIds = Array.isArray(category?.roleIds || category?.role_ids) ? (category.roleIds || category.role_ids) : [];
     const cleanedRoleIds = [...new Set(categoryRoleIds.map((roleId) => String(roleId || '').replace(/\D/g, '')).filter((roleId) => roleIds.has(roleId)))];
     categories.push({
       id: `cat_${categories.length + 1}`,
       name,
+      description,
       roleIds: cleanedRoleIds,
     });
   });
