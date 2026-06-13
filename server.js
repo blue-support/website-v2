@@ -64,6 +64,8 @@ const DASHBOARD_FUN_CONFIG_FILE = path.join(DATA_DIR, 'dashboard-fun-configs.jso
 const DASHBOARD_FUN_ACTION_FILE = path.join(DATA_DIR, 'dashboard-fun-actions.json');
 const DASHBOARD_COMMUNITY_CONFIG_FILE = path.join(DATA_DIR, 'dashboard-community-configs.json');
 const DASHBOARD_COMMUNITY_ACTION_FILE = path.join(DATA_DIR, 'dashboard-community-actions.json');
+const DASHBOARD_SECURITY_CONFIG_FILE = path.join(DATA_DIR, 'dashboard-security-configs.json');
+const DASHBOARD_SECURITY_ACTION_FILE = path.join(DATA_DIR, 'dashboard-security-actions.json');
 fs.mkdirSync(TICKET_UPLOAD_DIR, { recursive: true });
 
 const ticketUploadStorage = multer.diskStorage({
@@ -849,6 +851,45 @@ function saveDashboardModerationActions(data) {
 }
 
 
+
+function loadDashboardSecurityConfigs() {
+  const data = loadJson(DASHBOARD_SECURITY_CONFIG_FILE, { configs: {} });
+  if (!data.configs || typeof data.configs !== 'object') data.configs = {};
+  return data;
+}
+
+function saveDashboardSecurityConfigs(data) {
+  if (!data.configs || typeof data.configs !== 'object') data.configs = {};
+  saveJson(DASHBOARD_SECURITY_CONFIG_FILE, data);
+}
+
+function loadDashboardSecurityActions() {
+  const data = loadJson(DASHBOARD_SECURITY_ACTION_FILE, { actions: [] });
+  if (!Array.isArray(data.actions)) data.actions = [];
+  return data;
+}
+
+function saveDashboardSecurityActions(data) {
+  if (!Array.isArray(data.actions)) data.actions = [];
+  saveJson(DASHBOARD_SECURITY_ACTION_FILE, data);
+}
+
+function dashboardPublicSecurityConfig(config) {
+  if (!config || typeof config !== 'object') return null;
+  const links = config.links || {};
+  return {
+    guildId: String(config.guildId || ''),
+    links: {
+      enabled: Boolean(links.enabled),
+      ignoredRoleIds: Array.isArray(links.ignoredRoleIds || links.ignored_role_ids) ? (links.ignoredRoleIds || links.ignored_role_ids).map((id) => String(id || '').replace(/\D/g, '')).filter(Boolean) : [],
+      ignoredChannelIds: Array.isArray(links.ignoredChannelIds || links.ignored_channel_ids) ? (links.ignoredChannelIds || links.ignored_channel_ids).map((id) => String(id || '').replace(/\D/g, '')).filter(Boolean) : [],
+    },
+    status: config.status || 'saved',
+    lastResult: config.lastResult || null,
+    updatedAt: config.updatedAt || null,
+  };
+}
+
 function loadDashboardFunConfigs() {
   const data = loadJson(DASHBOARD_FUN_CONFIG_FILE, { configs: {} });
   if (!data.configs || typeof data.configs !== 'object') data.configs = {};
@@ -1130,6 +1171,7 @@ app.get('/api/dashboard/guild/:guildId', requireUser, (req, res) => {
   const moderationConfigs = loadDashboardModerationConfigs().configs;
   const funConfigs = loadDashboardFunConfigs().configs;
   const communityConfigs = loadDashboardCommunityConfigs().configs;
+  const securityConfigs = loadDashboardSecurityConfigs().configs;
   res.json({
     ok: true,
     guild: common.botGuild,
@@ -1138,6 +1180,7 @@ app.get('/api/dashboard/guild/:guildId', requireUser, (req, res) => {
     globalchat: globalchatConfigs[guildId] || common.botGuild.globalchat || null,
     ticket: dashboardPublicTicketConfig(ticketConfigs[guildId] || common.botGuild.ticket || null),
     moderation: dashboardPublicModerationConfig(moderationConfigs[guildId] || common.botGuild.moderation || null),
+    security: dashboardPublicSecurityConfig(securityConfigs[guildId] || common.botGuild.security || null),
     fun: dashboardPublicFunConfig(funConfigs[guildId] || common.botGuild.fun || null),
     community: dashboardPublicCommunityConfig(communityConfigs[guildId] || common.botGuild.community || null),
     messages: { messages: (messagesConfigs[guildId]?.messages || []).map(dashboardPublicMessage).filter(Boolean) }
@@ -1147,6 +1190,50 @@ app.get('/api/dashboard/guild/:guildId', requireUser, (req, res) => {
 
 
 
+
+
+app.post('/api/dashboard/guild/:guildId/security', requireUser, (req, res) => {
+  const guildId = String(req.params.guildId || '').replace(/\D/g, '');
+  const common = dashboardCommonGuild(req, guildId);
+  if (!common) return res.status(403).json({ ok: false, error: 'Nicht verfügbar - Administrator benötigt. Du brauchst Administratorrechte auf diesem Server.' });
+
+  const access = dashboardAccessFor(req.session.discordUser.id, guildId);
+  if (access.checked && access.canManage === false) return res.status(403).json({ ok: false, error: 'Der Bot konnte deine Administratorrechte auf diesem Server nicht bestätigen.' });
+
+  const botGuild = common.botGuild;
+  const availableRoleIds = new Set((botGuild.roles || []).filter((role) => !role.default && !role.managed).map((role) => String(role.id)));
+  const availableChannelIds = new Set((botGuild.channels || []).filter((channel) => ['text', 'news', 'forum'].includes(String(channel.type).toLowerCase())).map((channel) => String(channel.id)));
+  const links = req.body?.links || {};
+  const ignoredRoleIds = Array.isArray(links.ignoredRoleIds) ? links.ignoredRoleIds.map((id) => String(id || '').replace(/\D/g, '')).filter((id) => id && availableRoleIds.has(id)) : [];
+  const ignoredChannelIds = Array.isArray(links.ignoredChannelIds) ? links.ignoredChannelIds.map((id) => String(id || '').replace(/\D/g, '')).filter((id) => id && availableChannelIds.has(id)) : [];
+  const config = {
+    guildId,
+    links: {
+      enabled: Boolean(links.enabled),
+      ignoredRoleIds: Array.from(new Set(ignoredRoleIds)),
+      ignoredChannelIds: Array.from(new Set(ignoredChannelIds)),
+    },
+    updatedBy: { id: req.session.discordUser.id, username: req.session.discordUser.username },
+    updatedAt: new Date().toISOString(),
+    status: 'pending',
+  };
+
+  const configs = loadDashboardSecurityConfigs();
+  configs.configs[guildId] = config;
+  saveDashboardSecurityConfigs(configs);
+
+  const actions = loadDashboardSecurityActions();
+  actions.actions.push({
+    id: crypto.randomUUID(),
+    type: 'apply_security_setup',
+    guildId,
+    config,
+    status: 'pending',
+    createdAt: new Date().toISOString(),
+  });
+  saveDashboardSecurityActions(actions);
+  res.json({ ok: true, config: dashboardPublicSecurityConfig(config), message: 'Security-System wird vom Bot eingerichtet.' });
+});
 
 app.post('/api/dashboard/guild/:guildId/fun', requireUser, (req, res) => {
   const guildId = String(req.params.guildId || '').replace(/\D/g, '');
@@ -1699,6 +1786,36 @@ app.post('/api/dashboard/bot/community-action-result', requireDashboardBot, (req
   res.json({ ok: true });
 });
 
+
+app.get('/api/dashboard/bot/security-actions', requireDashboardBot, (_req, res) => {
+  const data = loadDashboardSecurityActions();
+  const actions = data.actions.filter((action) => action.status === 'pending');
+  res.json({ ok: true, actions });
+});
+
+app.post('/api/dashboard/bot/security-action-result', requireDashboardBot, (req, res) => {
+  const id = String(req.body?.id || '');
+  const data = loadDashboardSecurityActions();
+  const action = data.actions.find((item) => item.id === id);
+  if (!action) return res.status(404).json({ ok: false, error: 'Action nicht gefunden.' });
+  action.status = req.body?.ok ? 'done' : 'error';
+  action.result = req.body || {};
+  action.finishedAt = new Date().toISOString();
+  saveDashboardSecurityActions(data);
+
+  if (action.type === 'apply_security_setup' && action.guildId) {
+    const configs = loadDashboardSecurityConfigs();
+    if (configs.configs[action.guildId]) {
+      configs.configs[action.guildId].status = action.status;
+      configs.configs[action.guildId].lastResult = req.body;
+      if (req.body.security) configs.configs[action.guildId] = { ...configs.configs[action.guildId], ...req.body.security, status: action.status, lastResult: req.body };
+      configs.configs[action.guildId].updatedAt = new Date().toISOString();
+      saveDashboardSecurityConfigs(configs);
+    }
+  }
+  res.json({ ok: true });
+});
+
 app.get('/api/dashboard/bot/fun-actions', requireDashboardBot, (_req, res) => {
   const data = loadDashboardFunActions();
   const actions = data.actions.filter((action) => action.status === 'pending');
@@ -1888,6 +2005,7 @@ app.post('/api/dashboard/bot/saved-configs', requireDashboardBot, (req, res) => 
   const moderationConfigs = req.body?.moderationConfigs && typeof req.body.moderationConfigs === 'object' ? req.body.moderationConfigs : {};
   const funConfigs = req.body?.funConfigs && typeof req.body.funConfigs === 'object' ? req.body.funConfigs : {};
   const communityConfigs = req.body?.communityConfigs && typeof req.body.communityConfigs === 'object' ? req.body.communityConfigs : {};
+  const securityConfigs = req.body?.securityConfigs && typeof req.body.securityConfigs === 'object' ? req.body.securityConfigs : {};
 
   let verifyCount = 0;
   let globalchatCount = 0;
@@ -1896,6 +2014,7 @@ app.post('/api/dashboard/bot/saved-configs', requireDashboardBot, (req, res) => 
   let moderationCount = 0;
   let funCount = 0;
   let communityCount = 0;
+  let securityCount = 0;
 
   if (Object.keys(verifyConfigs).length) {
     const data = loadDashboardVerifyConfigs();
@@ -2065,7 +2184,27 @@ app.post('/api/dashboard/bot/saved-configs', requireDashboardBot, (req, res) => 
     saveDashboardCommunityConfigs(data);
   }
 
-  res.json({ ok: true, verifyCount, globalchatCount, messagesCount, ticketCount, moderationCount, funCount, communityCount });
+
+
+  if (Object.keys(securityConfigs).length) {
+    const data = loadDashboardSecurityConfigs();
+    for (const [guildIdRaw, configRaw] of Object.entries(securityConfigs)) {
+      const guildId = String(guildIdRaw || '').replace(/\D/g, '');
+      if (!guildId || !configRaw || typeof configRaw !== 'object') continue;
+      data.configs[guildId] = {
+        ...(data.configs[guildId] || {}),
+        ...configRaw,
+        guildId,
+        restoredFromBot: true,
+        status: configRaw.status || data.configs[guildId]?.status || 'done',
+        updatedAt: configRaw.updatedAt || data.configs[guildId]?.updatedAt || new Date().toISOString(),
+      };
+      securityCount += 1;
+    }
+    saveDashboardSecurityConfigs(data);
+  }
+
+  res.json({ ok: true, verifyCount, globalchatCount, messagesCount, ticketCount, moderationCount, funCount, communityCount, securityCount });
 });
 
 function loadApplications() {
