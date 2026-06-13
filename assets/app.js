@@ -742,6 +742,9 @@ async function initDashboardPage() {
   let securityDirty = false;
   let securityIgnoredRoleIds = new Set();
   let securityIgnoredChannelIds = new Set();
+  let securityLanguageIgnoredRoleIds = new Set();
+  let securityLanguageIgnoredChannelIds = new Set();
+  const dashboardSecurityLanguageLabels = { de: 'Deutsch', en: 'Englisch', tr: 'Türkisch', pl: 'Polnisch', fr: 'Französisch', es: 'Spanisch', it: 'Italienisch', nl: 'Niederländisch' };
   let funDirty = false;
   let communityDirty = false;
   let communityRoleIds = new Set();
@@ -1505,6 +1508,14 @@ async function initDashboardPage() {
   }
 
 
+  function selectedRoleTagHtml(role, attrName) {
+    return `<button class="selected-role-tag" type="button" ${attrName}="${escapeHtml(role.id)}"${roleColorStyle(role)}><span>@${escapeHtml(role.name)}</span><b aria-hidden="true">×</b></button>`;
+  }
+
+  function selectedChannelTagHtml(channel, attrName) {
+    return `<button class="selected-role-tag channel-chip" type="button" ${attrName}="${escapeHtml(channel.id)}"><span>#${escapeHtml(channel.name)}</span><b aria-hidden="true">×</b></button>`;
+  }
+
   function renderSecuritySelectedRoles() {
     const container = $('[data-dashboard-security-selected-roles]');
     const count = $('[data-dashboard-security-role-count]');
@@ -1515,7 +1526,7 @@ async function initDashboardPage() {
       container.innerHTML = '<span class="muted">Keine Rolle ignoriert</span>';
       return;
     }
-    container.innerHTML = selected.map((role) => `<button class="selected-role-tag" type="button" data-security-role-remove="${escapeHtml(role.id)}"${roleColorStyle(role)}><span>@${escapeHtml(role.name)}</span><b aria-hidden="true">×</b></button>`).join('');
+    container.innerHTML = selected.map((role) => selectedRoleTagHtml(role, 'data-security-role-remove')).join('');
     $$('[data-security-role-remove]', container).forEach((button) => {
       button.addEventListener('click', () => {
         securityIgnoredRoleIds.delete(String(button.dataset.securityRoleRemove || ''));
@@ -1558,7 +1569,7 @@ async function initDashboardPage() {
       container.innerHTML = '<span class="muted">Kein Kanal ignoriert</span>';
       return;
     }
-    container.innerHTML = selected.map((channel) => `<button class="selected-role-tag channel-chip" type="button" data-security-channel-remove="${escapeHtml(channel.id)}"><span>#${escapeHtml(channel.name)}</span><b aria-hidden="true">×</b></button>`).join('');
+    container.innerHTML = selected.map((channel) => selectedChannelTagHtml(channel, 'data-security-channel-remove')).join('');
     $$('[data-security-channel-remove]', container).forEach((button) => {
       button.addEventListener('click', () => {
         securityIgnoredChannelIds.delete(String(button.dataset.securityChannelRemove || ''));
@@ -1591,11 +1602,99 @@ async function initDashboardPage() {
     });
   }
 
+  function renderSecurityLanguageSelectedRoles() {
+    const container = $('[data-dashboard-security-language-selected-roles]');
+    const count = $('[data-dashboard-security-language-role-count]');
+    if (count) count.textContent = String(securityLanguageIgnoredRoleIds.size);
+    if (!container) return;
+    const selected = dashboardRoles.filter((role) => securityLanguageIgnoredRoleIds.has(String(role.id)));
+    if (!selected.length) {
+      container.innerHTML = '<span class="muted">Keine Rolle ignoriert</span>';
+      return;
+    }
+    container.innerHTML = selected.map((role) => selectedRoleTagHtml(role, 'data-security-language-role-remove')).join('');
+    $$('[data-security-language-role-remove]', container).forEach((button) => {
+      button.addEventListener('click', () => {
+        securityLanguageIgnoredRoleIds.delete(String(button.dataset.securityLanguageRoleRemove || ''));
+        securityDirty = true;
+        renderSecurityPickers();
+      });
+    });
+  }
+
+  function renderSecurityLanguageRolePicker() {
+    const container = $('[data-dashboard-security-language-role-picker]');
+    if (!container) return;
+    if (!dashboardRoles.length) {
+      container.innerHTML = '<p class="muted">Keine Rollen gefunden.</p>';
+      return;
+    }
+    container.innerHTML = dashboardRoles.map((role) => {
+      const active = securityLanguageIgnoredRoleIds.has(String(role.id));
+      return `<button class="role-chip ${active ? 'active' : ''}" type="button" data-security-language-role-chip="${escapeHtml(role.id)}"${roleColorStyle(role)}><span class="role-dot"></span>@${escapeHtml(role.name)}</button>`;
+    }).join('');
+    $$('[data-security-language-role-chip]', container).forEach((button) => {
+      button.addEventListener('click', () => {
+        const id = String(button.dataset.securityLanguageRoleChip || '');
+        if (!id) return;
+        if (securityLanguageIgnoredRoleIds.has(id)) securityLanguageIgnoredRoleIds.delete(id);
+        else securityLanguageIgnoredRoleIds.add(id);
+        securityDirty = true;
+        renderSecurityPickers();
+      });
+    });
+  }
+
+  function renderSecurityLanguageSelectedChannels() {
+    const container = $('[data-dashboard-security-language-selected-channels]');
+    const count = $('[data-dashboard-security-language-channel-count]');
+    if (count) count.textContent = String(securityLanguageIgnoredChannelIds.size);
+    if (!container) return;
+    const selected = dashboardChannels.filter((channel) => securityLanguageIgnoredChannelIds.has(String(channel.id)));
+    if (!selected.length) {
+      container.innerHTML = '<span class="muted">Kein Kanal ignoriert</span>';
+      return;
+    }
+    container.innerHTML = selected.map((channel) => selectedChannelTagHtml(channel, 'data-security-language-channel-remove')).join('');
+    $$('[data-security-language-channel-remove]', container).forEach((button) => {
+      button.addEventListener('click', () => {
+        securityLanguageIgnoredChannelIds.delete(String(button.dataset.securityLanguageChannelRemove || ''));
+        securityDirty = true;
+        renderSecurityPickers();
+      });
+    });
+  }
+
+  function renderSecurityLanguageChannelPicker() {
+    const container = $('[data-dashboard-security-language-channel-picker]');
+    if (!container) return;
+    if (!dashboardChannels.length) {
+      container.innerHTML = '<p class="muted">Keine Textkanäle gefunden.</p>';
+      return;
+    }
+    container.innerHTML = dashboardChannels.map((channel) => {
+      const active = securityLanguageIgnoredChannelIds.has(String(channel.id));
+      return `<button class="role-chip channel-chip ${active ? 'active' : ''}" type="button" data-security-language-channel-chip="${escapeHtml(channel.id)}"><span class="role-dot"></span>#${escapeHtml(channel.name)}</button>`;
+    }).join('');
+    $$('[data-security-language-channel-chip]', container).forEach((button) => {
+      button.addEventListener('click', () => {
+        const id = String(button.dataset.securityLanguageChannelChip || '');
+        if (!id) return;
+        if (securityLanguageIgnoredChannelIds.has(id)) securityLanguageIgnoredChannelIds.delete(id);
+        else securityLanguageIgnoredChannelIds.add(id);
+        securityDirty = true;
+        renderSecurityPickers();
+      });
+    });
+  }
+
   function updateSecurityPreview() {
     if (!securityForm) return;
-    const enabled = securityForm.querySelector('[name="securityLinksEnabled"]')?.checked;
+    const linksEnabled = securityForm.querySelector('[name="securityLinksEnabled"]')?.checked;
+    const languageEnabled = securityForm.querySelector('[name="securityLanguageEnabled"]')?.checked;
+    const lang = securityForm.querySelector('[name="securityPreferredLanguage"]')?.value || 'de';
     const enabledPreview = $('[data-dashboard-security-enabled-preview]');
-    if (enabledPreview) enabledPreview.textContent = enabled ? 'Aktiv · https:// wird gelöscht' : 'Nicht aktiv';
+    if (enabledPreview) enabledPreview.textContent = linksEnabled ? 'Aktiv · https:// wird gelöscht' : 'Nicht aktiv';
     const rolesPreview = $('[data-dashboard-security-roles-preview]');
     const channelsPreview = $('[data-dashboard-security-channels-preview]');
     if (rolesPreview) {
@@ -1606,6 +1705,20 @@ async function initDashboardPage() {
       const names = dashboardChannels.filter((channel) => securityIgnoredChannelIds.has(String(channel.id))).map((channel) => `#${channel.name}`);
       channelsPreview.textContent = names.length ? names.join(', ') : 'Keine';
     }
+    const languageEnabledPreview = $('[data-dashboard-security-language-enabled-preview]');
+    if (languageEnabledPreview) languageEnabledPreview.textContent = languageEnabled ? 'Aktiv · andere Sprachen werden blockiert' : 'Nicht aktiv';
+    const languagePreview = $('[data-dashboard-security-language-preview]');
+    if (languagePreview) languagePreview.textContent = dashboardSecurityLanguageLabels[lang] || lang.toUpperCase();
+    const languageRolesPreview = $('[data-dashboard-security-language-roles-preview]');
+    if (languageRolesPreview) {
+      const names = dashboardRoles.filter((role) => securityLanguageIgnoredRoleIds.has(String(role.id))).map((role) => `@${role.name}`);
+      languageRolesPreview.textContent = names.length ? names.join(', ') : 'Keine';
+    }
+    const languageChannelsPreview = $('[data-dashboard-security-language-channels-preview]');
+    if (languageChannelsPreview) {
+      const names = dashboardChannels.filter((channel) => securityLanguageIgnoredChannelIds.has(String(channel.id))).map((channel) => `#${channel.name}`);
+      languageChannelsPreview.textContent = names.length ? names.join(', ') : 'Keine';
+    }
   }
 
   function renderSecurityPickers() {
@@ -1613,6 +1726,10 @@ async function initDashboardPage() {
     renderSecuritySelectedRoles();
     renderSecurityChannelPicker();
     renderSecuritySelectedChannels();
+    renderSecurityLanguageRolePicker();
+    renderSecurityLanguageSelectedRoles();
+    renderSecurityLanguageChannelPicker();
+    renderSecurityLanguageSelectedChannels();
     updateSecurityPreview();
   }
 
@@ -1620,15 +1737,22 @@ async function initDashboardPage() {
     if (!securityForm) return;
     const config = data.security || {};
     const links = config.links || {};
+    const language = config.language || {};
     const enabledInput = securityForm.querySelector('[name="securityLinksEnabled"]');
     if (enabledInput) enabledInput.checked = Boolean(links.enabled);
+    const languageEnabledInput = securityForm.querySelector('[name="securityLanguageEnabled"]');
+    if (languageEnabledInput) languageEnabledInput.checked = Boolean(language.enabled);
+    const languageSelect = securityForm.querySelector('[name="securityPreferredLanguage"]');
+    if (languageSelect) languageSelect.value = language.preferred || language.language || 'de';
     securityIgnoredRoleIds = new Set((links.ignoredRoleIds || links.ignored_role_ids || []).map(String));
     securityIgnoredChannelIds = new Set((links.ignoredChannelIds || links.ignored_channel_ids || []).map(String));
+    securityLanguageIgnoredRoleIds = new Set((language.ignoredRoleIds || language.ignored_role_ids || []).map(String));
+    securityLanguageIgnoredChannelIds = new Set((language.ignoredChannelIds || language.ignored_channel_ids || []).map(String));
     const status = $('[data-dashboard-security-status]');
     if (status) {
-      const active = Boolean(links.enabled);
-      status.textContent = active ? 'Aktiv' : 'Nicht aktiv';
-      status.className = `chip ${active ? 'online' : ''}`;
+      const activeCount = [Boolean(links.enabled), Boolean(language.enabled)].filter(Boolean).length;
+      status.textContent = activeCount ? `${activeCount} aktiv` : 'Nicht aktiv';
+      status.className = `chip ${activeCount ? 'online' : ''}`;
     }
     securityDirty = false;
     renderSecurityPickers();
@@ -1957,6 +2081,12 @@ async function initDashboardPage() {
         enabled: formData.get('securityLinksEnabled') === 'on',
         ignoredRoleIds: Array.from(securityIgnoredRoleIds),
         ignoredChannelIds: Array.from(securityIgnoredChannelIds),
+      },
+      language: {
+        enabled: formData.get('securityLanguageEnabled') === 'on',
+        preferred: String(formData.get('securityPreferredLanguage') || 'de'),
+        ignoredRoleIds: Array.from(securityLanguageIgnoredRoleIds),
+        ignoredChannelIds: Array.from(securityLanguageIgnoredChannelIds),
       }
     };
     const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/security`, {
@@ -1968,7 +2098,10 @@ async function initDashboardPage() {
     if (!response.ok || !result.ok) return dashboardNotify('security', result.error || 'Security konnte nicht gespeichert werden.', 'error');
     securityDirty = false;
     if (result.config) renderSecurityConfig({ security: result.config }, dashboardChannels);
-    dashboardNotify('security', payload.links.enabled ? 'Link-Schutz gespeichert. Blue löscht jetzt https:// Links, außer Ausnahmen greifen.' : 'Link-Schutz deaktiviert und gespeichert.', 'success');
+    const activeParts = [];
+    if (payload.links.enabled) activeParts.push('Link-Schutz');
+    if (payload.language.enabled) activeParts.push('Sprachschutz');
+    dashboardNotify('security', activeParts.length ? `${activeParts.join(' & ')} gespeichert.` : 'Security gespeichert. Alle Schutzsysteme sind deaktiviert.', 'success');
   });
 
   funForm?.addEventListener('submit', async (event) => {
