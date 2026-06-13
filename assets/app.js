@@ -753,6 +753,7 @@ async function initDashboardPage() {
     { id: 'warnings', label: 'Warnings' },
   ];
   let ticketCategories = [];
+  let ticketPanelEmbedIsDefault = true;
   let dashboardMessages = [];
   let selectedDashboardMessageId = null;
   let messagesDirty = false;
@@ -917,6 +918,55 @@ async function initDashboardPage() {
     updateGlobalchatPreview();
   }
 
+  function ticketPanelDefaultEmbed() {
+    const guildName = selectedGuildData?.name || 'deinem Server';
+    return {
+      author: '',
+      authorImage: '',
+      title: '🎫 Blue Support Center',
+      description: `Willkommen im offiziellen Support-Bereich von **${guildName}**.\n\nWähle unten eine passende Kategorie aus und beschreibe dein Anliegen im Formular möglichst genau. Unser Team wird dein Ticket anschließend schnellstmöglich bearbeiten.`,
+      footer: 'Powered by Blue ⚡'
+    };
+  }
+
+  function getTicketPanelEmbedFromForm(forPreview = false) {
+    const defaults = ticketPanelDefaultEmbed();
+    if (!ticketForm) return defaults;
+    const value = (name) => ticketForm.querySelector(`[name="${name}"]`)?.value || '';
+    if (ticketPanelEmbedIsDefault && !forPreview) return null;
+    return {
+      author: value('ticketPanelAuthor').trim(),
+      authorImage: value('ticketPanelAuthorImage').trim(),
+      title: value('ticketPanelTitle').trim() || defaults.title,
+      description: value('ticketPanelDescription').trim() || defaults.description,
+      footer: value('ticketPanelFooter').trim() || 'Powered by Blue ⚡',
+    };
+  }
+
+  function setTicketPanelEmbedForm(panelEmbed = null, forceDefault = false) {
+    if (!ticketForm) return;
+    const defaults = ticketPanelDefaultEmbed();
+    const isDefault = forceDefault || !panelEmbed || panelEmbed.default === true;
+    ticketPanelEmbedIsDefault = isDefault;
+    const embed = isDefault ? defaults : { ...defaults, ...(panelEmbed || {}) };
+    const set = (name, value) => {
+      const input = ticketForm.querySelector(`[name="${name}"]`);
+      if (input) input.value = value || '';
+    };
+    set('ticketPanelAuthor', embed.author || '');
+    set('ticketPanelAuthorImage', embed.authorImage || embed.author_image || '');
+    set('ticketPanelTitle', embed.title || defaults.title);
+    set('ticketPanelDescription', embed.description || defaults.description);
+    set('ticketPanelFooter', embed.footer || 'Powered by Blue ⚡');
+    const footerInput = $('[data-dashboard-ticket-footer-input]');
+    const footerNote = $('[data-dashboard-ticket-footer-note]');
+    if (footerInput) {
+      footerInput.disabled = !(access && access.hasPremiumFooter);
+      if (!(access && access.hasPremiumFooter)) footerInput.value = 'Powered by Blue ⚡';
+    }
+    if (footerNote) footerNote.textContent = access && access.hasPremiumFooter ? 'Blue Premium erkannt: Du darfst den Ticket-Panel-Footer bearbeiten.' : 'Ohne Blue Premium auf dem Mainserver bleibt der Footer fest auf Powered by Blue ⚡.';
+  }
+
   function emptyTicketCategory(index = 0) {
     return { id: `cat_${index + 1}`, name: '', description: '', roleIds: [] };
   }
@@ -947,16 +997,35 @@ async function initDashboardPage() {
     if (panelPreview) panelPreview.textContent = channelName(panelSelect, 'Kanal auswählen');
     if (categoryPreview) categoryPreview.textContent = channelName(categorySelect, 'Kategorie auswählen');
     if (logPreview) logPreview.textContent = channelName(logSelect, 'Kanal auswählen');
+
+    const panelEmbed = getTicketPanelEmbedFromForm(true);
+    const author = $('[data-ticket-panel-preview-author]');
+    const title = $('[data-ticket-panel-preview-title]');
+    const description = $('[data-ticket-panel-preview-description]');
+    const footer = $('[data-ticket-panel-preview-footer]');
+    const previewCard = $('[data-ticket-panel-preview-card]');
+    if (previewCard) previewCard.style.borderLeftColor = '#5865f2';
+    if (author) {
+      const authorText = String(panelEmbed.author || '').trim();
+      const authorImage = String(panelEmbed.authorImage || panelEmbed.author_image || '').trim();
+      author.hidden = !authorText;
+      author.innerHTML = authorText ? `${authorImage ? `<img src="${escapeHtml(authorImage)}" alt="">` : ''}<span>${escapeHtml(authorText)}</span>` : '';
+    }
+    if (title) title.textContent = panelEmbed.title || '🎫 Blue Support Center';
+    if (description) description.textContent = panelEmbed.description || ticketPanelDefaultEmbed().description;
+    if (footer) footer.textContent = panelEmbed.footer || 'Powered by Blue ⚡';
+
     const categoriesPreview = $('[data-dashboard-ticket-preview-categories]');
     if (categoriesPreview) {
-      const rows = ticketCategories.filter((category) => category.name.trim()).map((category) => {
+      const rows = ticketCategories.filter((category) => category.name.trim()).map((category, index) => {
         const roleNames = dashboardRoles.filter((role) => (category.roleIds || []).map(String).includes(String(role.id))).map((role) => `@${role.name}`);
         const desc = String(category.description || '').trim();
-        return `<div><strong>${escapeHtml(category.name)}</strong>${desc ? `<p>${escapeHtml(desc)}</p>` : ''}<small>${roleNames.length ? escapeHtml(roleNames.join(', ')) : 'Keine Team-Rolle gewählt'}</small></div>`;
+        return `<div><strong>${String(index + 1).padStart(2, '0')} · ${escapeHtml(category.name)}</strong>${desc ? `<p>${escapeHtml(desc)}</p>` : ''}<small>${roleNames.length ? escapeHtml(roleNames.join(', ')) : 'Keine Team-Rolle gewählt'}</small></div>`;
       });
       categoriesPreview.innerHTML = rows.length ? rows.join('') : '<p class="muted compact">Noch keine Kategorie eingerichtet.</p>';
     }
   }
+
 
   function renderTicketSelectedTags(container, categoryIndex) {
     const category = ticketCategories[categoryIndex];
@@ -1056,6 +1125,7 @@ async function initDashboardPage() {
     if (ticketCategorySelect) ticketCategorySelect.innerHTML = '<option value="">Discord-Kategorie auswählen</option>' + dashboardSelectOptions(categoryChannels, [config.ticketCategoryId || config.ticket_category_id].filter(Boolean));
     if (logSelect) logSelect.innerHTML = '<option value="">Log-Kanal auswählen</option>' + dashboardSelectOptions(textChannels, [config.logChannelId || config.log_channel_id].filter(Boolean));
     ticketCategories = normalizeTicketCategories(config.categories || []);
+    setTicketPanelEmbedForm(config.panelEmbed || config.panel_embed || null);
     const status = $('[data-dashboard-ticket-status]');
     if (status) {
       const active = Boolean(config.panelChannelId || config.panel_channel_id);
@@ -1609,8 +1679,16 @@ async function initDashboardPage() {
   form?.addEventListener('change', () => { dashboardDirty = true; updateVerifyPreview(); });
   globalchatForm?.addEventListener('input', () => { globalchatDirty = true; updateGlobalchatPreview(); });
   globalchatForm?.addEventListener('change', () => { globalchatDirty = true; updateGlobalchatPreview(); });
-  ticketForm?.addEventListener('input', () => { ticketDirty = true; updateTicketPreview(); });
-  ticketForm?.addEventListener('change', () => { ticketDirty = true; updateTicketPreview(); });
+  ticketForm?.addEventListener('input', (event) => {
+    if (event.target?.matches?.('[name^="ticketPanel"]')) ticketPanelEmbedIsDefault = false;
+    ticketDirty = true;
+    updateTicketPreview();
+  });
+  ticketForm?.addEventListener('change', (event) => {
+    if (event.target?.matches?.('[name^="ticketPanel"]')) ticketPanelEmbedIsDefault = false;
+    ticketDirty = true;
+    updateTicketPreview();
+  });
   moderationForm?.addEventListener('input', () => { moderationDirty = true; updateModerationPreview(); });
   moderationForm?.addEventListener('change', () => { moderationDirty = true; updateModerationPreview(); });
   funForm?.addEventListener('input', () => { funDirty = true; updateFunPreview(); });
@@ -1740,6 +1818,13 @@ async function initDashboardPage() {
   });
 
 
+  $('[data-dashboard-ticket-panel-reset]')?.addEventListener('click', () => {
+    setTicketPanelEmbedForm(null, true);
+    ticketDirty = true;
+    updateTicketPreview();
+    dashboardNotify('ticket', 'Ticket-Panel wurde auf Standard zurückgesetzt. Speichern nicht vergessen.', 'info');
+  });
+
   $('[data-dashboard-ticket-add-category]')?.addEventListener('click', () => {
     if (ticketCategories.length >= 5) return dashboardNotify('ticket', 'Maximal 5 Ticket-Kategorien sind möglich.', 'warn');
     ticketCategories.push(emptyTicketCategory(ticketCategories.length));
@@ -1763,7 +1848,8 @@ async function initDashboardPage() {
       panelChannelId: formData.get('ticketPanelChannelId'),
       ticketCategoryId: formData.get('ticketCategoryId'),
       logChannelId: formData.get('ticketLogChannelId'),
-      categories
+      categories,
+      panelEmbed: getTicketPanelEmbedFromForm(false)
     };
     if (!payload.panelChannelId || !payload.ticketCategoryId || !payload.logChannelId) return dashboardNotify('ticket', 'Bitte wähle Panel-Kanal, Ticket-Kategorie und Log-Kanal aus.', 'warn');
     const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/ticket`, {
