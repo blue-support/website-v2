@@ -1756,3 +1756,95 @@ img,video,canvas{max-width:100%}
     min-height: auto !important;
   }
 }
+
+/* Dashboard Ticket Setup */
+.ticket-dashboard-layout{
+  display:grid;
+  grid-template-columns:minmax(0,1.15fr) minmax(320px,.85fr);
+  gap:18px;
+  align-items:start;
+}
+.ticket-base-card,
+.ticket-categories-card{
+  min-width:0;
+}
+.ticket-categories-card{
+  grid-column:1 / 2;
+}
+.ticket-preview-card{
+  grid-column:2 / 3;
+  grid-row:1 / span 2;
+  position:sticky;
+  top:92px;
+}
+.ticket-category-list{
+  display:grid;
+  gap:14px;
+  margin-top:14px;
+}
+.ticket-category-builder{
+  border:1px solid rgba(148,163,184,.18);
+  background:rgba(15,23,42,.52);
+  border-radius:20px;
+  padding:16px;
+  display:grid;
+  gap:14px;
+  box-shadow:0 18px 45px rgba(2,6,23,.18);
+}
+.ticket-category-head{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:12px;
+  align-items:end;
+}
+.dashboard-ticket-preview-categories{
+  display:grid;
+  gap:10px;
+  margin-top:14px;
+}
+.dashboard-ticket-preview-categories div{
+  border:1px solid rgba(148,163,184,.18);
+  background:rgba(15,23,42,.45);
+  border-radius:14px;
+  padding:11px 12px;
+  display:grid;
+  gap:4px;
+}
+.dashboard-ticket-preview-categories small{
+  color:var(--muted);
+  line-height:1.4;
+}
+.danger-lite{
+  color:#fecaca!important;
+  border-color:rgba(248,113,113,.35)!important;
+}
+.danger-lite:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+}
+.form-actions-wide{
+  margin-top:18px;
+  justify-content:flex-end;
+}
+@media (max-width:980px){
+  .ticket-dashboard-layout{
+    grid-template-columns:1fr;
+  }
+  .ticket-preview-card{
+    grid-column:auto;
+    grid-row:auto;
+    position:static;
+  }
+  .ticket-categories-card{
+    grid-column:auto;
+  }
+}
+@media (max-width:640px){
+  .ticket-category-head{
+    grid-template-columns:1fr;
+  }
+  .ticket-category-builder{
+    padding:13px;
+    border-radius:16px;
+  }
+}

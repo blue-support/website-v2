@@ -719,6 +719,7 @@ async function initDashboardPage() {
   const form = $('[data-dashboard-verify-form]');
   const globalchatForm = $('[data-dashboard-globalchat-form]');
   const messagesForm = $('[data-dashboard-messages-form]');
+  const ticketForm = $('[data-dashboard-ticket-form]');
   const soon = $('[data-dashboard-soon]');
   let selectedGuildId = null;
   let selectedGuildData = null;
@@ -728,9 +729,12 @@ async function initDashboardPage() {
   let selectedRemoveRoleIds = new Set();
   let dashboardDirty = false;
   let dashboardChannels = [];
+  let dashboardCategoryChannels = [];
   let dashboardServerAutoRefreshes = 0;
   let dashboardServerAutoRefreshTimer = null;
   let globalchatDirty = false;
+  let ticketDirty = false;
+  let ticketCategories = [];
   let dashboardMessages = [];
   let selectedDashboardMessageId = null;
   let messagesDirty = false;
@@ -850,6 +854,144 @@ async function initDashboardPage() {
     }
     globalchatDirty = false;
     updateGlobalchatPreview();
+  }
+
+  function emptyTicketCategory(index = 0) {
+    return { id: `cat_${index + 1}`, name: '', roleIds: [] };
+  }
+
+  function normalizeTicketCategories(categories) {
+    const list = Array.isArray(categories) ? categories : [];
+    const cleaned = list.slice(0, 5).map((category, index) => ({
+      id: category.id || `cat_${index + 1}`,
+      name: category.name || '',
+      roleIds: Array.isArray(category.roleIds || category.role_ids) ? (category.roleIds || category.role_ids).map(String) : [],
+    }));
+    return cleaned.length ? cleaned : [emptyTicketCategory(0)];
+  }
+
+  function updateTicketPreview() {
+    if (!ticketForm) return;
+    const panelSelect = $('[data-dashboard-ticket-panel-channel]');
+    const categorySelect = $('[data-dashboard-ticket-category-select]');
+    const logSelect = $('[data-dashboard-ticket-log-channel]');
+    const channelName = (select, fallback) => {
+      const selected = [...(select?.options || [])].find((option) => option.value === select?.value);
+      return selected && selected.value ? `#${selected.textContent}` : fallback;
+    };
+    const panelPreview = $('[data-dashboard-ticket-panel-preview]');
+    const categoryPreview = $('[data-dashboard-ticket-category-preview]');
+    const logPreview = $('[data-dashboard-ticket-log-preview]');
+    if (panelPreview) panelPreview.textContent = channelName(panelSelect, 'Kanal auswählen');
+    if (categoryPreview) categoryPreview.textContent = channelName(categorySelect, 'Kategorie auswählen');
+    if (logPreview) logPreview.textContent = channelName(logSelect, 'Kanal auswählen');
+    const categoriesPreview = $('[data-dashboard-ticket-preview-categories]');
+    if (categoriesPreview) {
+      const rows = ticketCategories.filter((category) => category.name.trim()).map((category) => {
+        const roleNames = dashboardRoles.filter((role) => (category.roleIds || []).map(String).includes(String(role.id))).map((role) => `@${role.name}`);
+        return `<div><strong>${escapeHtml(category.name)}</strong><small>${roleNames.length ? escapeHtml(roleNames.join(', ')) : 'Keine Team-Rolle gewählt'}</small></div>`;
+      });
+      categoriesPreview.innerHTML = rows.length ? rows.join('') : '<p class="muted compact">Noch keine Kategorie eingerichtet.</p>';
+    }
+  }
+
+  function renderTicketSelectedTags(container, categoryIndex) {
+    const category = ticketCategories[categoryIndex];
+    const selectedSet = new Set((category?.roleIds || []).map(String));
+    const selectedRoles = dashboardRoles.filter((role) => selectedSet.has(String(role.id)));
+    if (!selectedRoles.length) {
+      container.innerHTML = '<span class="muted">Keine Team-Rolle gewählt</span>';
+      return;
+    }
+    container.innerHTML = selectedRoles.map((role) => `<button class="selected-role-tag" type="button" data-ticket-role-remove="${escapeHtml(role.id)}"${roleColorStyle(role)}><span>@${escapeHtml(role.name)}</span><b aria-hidden="true">×</b></button>`).join('');
+    $$('[data-ticket-role-remove]', container).forEach((button) => {
+      button.addEventListener('click', () => {
+        ticketCategories[categoryIndex].roleIds = (ticketCategories[categoryIndex].roleIds || []).filter((id) => String(id) !== String(button.dataset.ticketRoleRemove));
+        ticketDirty = true;
+        renderTicketCategoryRows();
+      });
+    });
+  }
+
+  function renderTicketRolePicker(container, categoryIndex) {
+    const selectedSet = new Set((ticketCategories[categoryIndex]?.roleIds || []).map(String));
+    if (!dashboardRoles.length) {
+      container.innerHTML = '<p class="muted">Keine Rollen gefunden.</p>';
+      return;
+    }
+    container.innerHTML = dashboardRoles.map((role) => {
+      const active = selectedSet.has(String(role.id));
+      return `<button class="role-chip ${active ? 'active' : ''}" type="button" data-ticket-role-chip="${escapeHtml(role.id)}"${roleColorStyle(role)}><span class="role-dot"></span>@${escapeHtml(role.name)}</button>`;
+    }).join('');
+    $$('[data-ticket-role-chip]', container).forEach((button) => {
+      button.addEventListener('click', () => {
+        const id = String(button.dataset.ticketRoleChip || '');
+        const roles = new Set((ticketCategories[categoryIndex].roleIds || []).map(String));
+        if (roles.has(id)) roles.delete(id);
+        else roles.add(id);
+        ticketCategories[categoryIndex].roleIds = Array.from(roles);
+        ticketDirty = true;
+        renderTicketCategoryRows();
+      });
+    });
+  }
+
+  function renderTicketCategoryRows() {
+    const list = $('[data-dashboard-ticket-category-list]');
+    if (!list) return;
+    ticketCategories = ticketCategories.slice(0, 5);
+    list.innerHTML = ticketCategories.map((category, index) => `
+      <div class="ticket-category-builder" data-ticket-category-index="${index}">
+        <div class="ticket-category-head">
+          <label>Kategorie Name<input data-ticket-category-name="${index}" maxlength="50" value="${escapeHtml(category.name || '')}" placeholder="z. B. Allgemeiner Support"></label>
+          <button class="btn ghost danger-lite" type="button" data-ticket-category-remove="${index}" ${ticketCategories.length <= 1 ? 'disabled' : ''}>Entfernen</button>
+        </div>
+        <div class="role-picker-title"><strong>Team-Rollen</strong><small>Diese Rollen sehen und bearbeiten Tickets dieser Kategorie.</small></div>
+        <div class="dashboard-role-picker" data-ticket-role-picker="${index}"></div>
+        <div class="selected-role-tags" data-ticket-role-selected="${index}"></div>
+      </div>
+    `).join('');
+    $$('[data-ticket-category-name]', list).forEach((input) => {
+      input.addEventListener('input', () => {
+        const index = Number.parseInt(input.dataset.ticketCategoryName, 10);
+        if (ticketCategories[index]) ticketCategories[index].name = input.value;
+        ticketDirty = true;
+        updateTicketPreview();
+      });
+    });
+    $$('[data-ticket-category-remove]', list).forEach((button) => {
+      button.addEventListener('click', () => {
+        const index = Number.parseInt(button.dataset.ticketCategoryRemove, 10);
+        ticketCategories.splice(index, 1);
+        if (!ticketCategories.length) ticketCategories.push(emptyTicketCategory(0));
+        ticketCategories = ticketCategories.map((category, idx) => ({ ...category, id: `cat_${idx + 1}` }));
+        ticketDirty = true;
+        renderTicketCategoryRows();
+      });
+    });
+    $$('[data-ticket-role-picker]', list).forEach((container) => renderTicketRolePicker(container, Number.parseInt(container.dataset.ticketRolePicker, 10)));
+    $$('[data-ticket-role-selected]', list).forEach((container) => renderTicketSelectedTags(container, Number.parseInt(container.dataset.ticketRoleSelected, 10)));
+    updateTicketPreview();
+  }
+
+  function renderTicketConfig(data, textChannels, categoryChannels) {
+    if (!ticketForm) return;
+    const config = data.ticket || {};
+    const panelSelect = $('[data-dashboard-ticket-panel-channel]');
+    const ticketCategorySelect = $('[data-dashboard-ticket-category-select]');
+    const logSelect = $('[data-dashboard-ticket-log-channel]');
+    if (panelSelect) panelSelect.innerHTML = '<option value="">Panel-Kanal auswählen</option>' + dashboardSelectOptions(textChannels, [config.panelChannelId || config.panel_channel_id].filter(Boolean));
+    if (ticketCategorySelect) ticketCategorySelect.innerHTML = '<option value="">Discord-Kategorie auswählen</option>' + dashboardSelectOptions(categoryChannels, [config.ticketCategoryId || config.ticket_category_id].filter(Boolean));
+    if (logSelect) logSelect.innerHTML = '<option value="">Log-Kanal auswählen</option>' + dashboardSelectOptions(textChannels, [config.logChannelId || config.log_channel_id].filter(Boolean));
+    ticketCategories = normalizeTicketCategories(config.categories || []);
+    const status = $('[data-dashboard-ticket-status]');
+    if (status) {
+      const active = Boolean(config.panelChannelId || config.panel_channel_id);
+      status.textContent = active ? 'Eingerichtet' : 'Nicht eingerichtet';
+      status.className = `chip ${active ? 'online' : ''}`;
+    }
+    renderTicketCategoryRows();
+    ticketDirty = false;
   }
 
 
@@ -1020,7 +1162,9 @@ async function initDashboardPage() {
     const roles = (selectedGuildData.roles || []).filter((role) => !role.managed && !role.default).sort((a, b) => (b.position || 0) - (a.position || 0));
     const channels = (selectedGuildData.channels || []).filter((channel) => ['text', 'news', 'forum'].includes(channel.type));
     const globalchatChannels = channels.filter((channel) => ['text', 'news'].includes(channel.type));
+    const categoryChannels = (selectedGuildData.channels || []).filter((channel) => channel.type === 'category');
     dashboardChannels = globalchatChannels;
+    dashboardCategoryChannels = categoryChannels;
     dashboardRoles = roles;
     selectedAddRoleIds = new Set((data.verification?.addRoleIds || data.verification?.role_ids || []).map(String));
     selectedRemoveRoleIds = new Set((data.verification?.removeRoleIds || data.verification?.remove_role_ids || []).map(String));
@@ -1032,6 +1176,7 @@ async function initDashboardPage() {
       logChannelSelect.innerHTML = '<option value="">Kein Log-Kanal</option>' + dashboardSelectOptions(channels, [data.verification?.logChannelId || data.verification?.log_channel_id].filter(Boolean));
     }
     renderGlobalchatConfig(data, globalchatChannels);
+    renderTicketConfig(data, globalchatChannels, categoryChannels);
     renderMessagesConfig(data, globalchatChannels);
     if (data.verification?.mode) {
       const modeInput = form.querySelector(`[name="mode"][value="${data.verification.mode}"]`);
@@ -1138,6 +1283,8 @@ async function initDashboardPage() {
   form?.addEventListener('change', () => { dashboardDirty = true; updateVerifyPreview(); });
   globalchatForm?.addEventListener('input', () => { globalchatDirty = true; updateGlobalchatPreview(); });
   globalchatForm?.addEventListener('change', () => { globalchatDirty = true; updateGlobalchatPreview(); });
+  ticketForm?.addEventListener('input', () => { ticketDirty = true; updateTicketPreview(); });
+  ticketForm?.addEventListener('change', () => { ticketDirty = true; updateTicketPreview(); });
   messagesForm?.addEventListener('input', () => { messagesDirty = true; updateMessagePreview(); });
   messagesForm?.addEventListener('change', () => { messagesDirty = true; updateMessagePreview(); });
   $('[data-dashboard-refresh]')?.addEventListener('click', async () => {
@@ -1150,8 +1297,9 @@ async function initDashboardPage() {
       $$('[data-dashboard-section]').forEach((node) => node.classList.toggle('active', node === button));
       if (form) form.hidden = section !== 'verification';
       if (globalchatForm) globalchatForm.hidden = section !== 'globalchat';
+      if (ticketForm) ticketForm.hidden = section !== 'ticket';
       if (messagesForm) messagesForm.hidden = section !== 'messages';
-      if (section === 'verification' || section === 'globalchat' || section === 'messages') {
+      if (section === 'verification' || section === 'globalchat' || section === 'messages' || section === 'ticket') {
         if (soon) soon.hidden = true;
       } else if (soon) {
         soon.hidden = false;
@@ -1160,6 +1308,44 @@ async function initDashboardPage() {
     });
   });
 
+
+
+  $('[data-dashboard-ticket-add-category]')?.addEventListener('click', () => {
+    if (ticketCategories.length >= 5) return showDashboardMessage('Maximal 5 Ticket-Kategorien sind möglich.', 'warn');
+    ticketCategories.push(emptyTicketCategory(ticketCategories.length));
+    ticketDirty = true;
+    renderTicketCategoryRows();
+  });
+
+  ticketForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!selectedGuildId) return showDashboardMessage('Bitte wähle zuerst einen Server.', 'warn');
+    const formData = new FormData(ticketForm);
+    const categories = ticketCategories.map((category, index) => ({
+      id: `cat_${index + 1}`,
+      name: (category.name || '').trim(),
+      roleIds: Array.from(new Set((category.roleIds || []).map(String)))
+    })).filter((category) => category.name);
+    if (!categories.length) return showDashboardMessage('Bitte erstelle mindestens eine Ticket-Kategorie.', 'warn');
+    if (categories.some((category) => !category.roleIds.length)) return showDashboardMessage('Jede Ticket-Kategorie braucht mindestens eine Team-Rolle.', 'warn');
+    const payload = {
+      panelChannelId: formData.get('ticketPanelChannelId'),
+      ticketCategoryId: formData.get('ticketCategoryId'),
+      logChannelId: formData.get('ticketLogChannelId'),
+      categories
+    };
+    if (!payload.panelChannelId || !payload.ticketCategoryId || !payload.logChannelId) return showDashboardMessage('Bitte wähle Panel-Kanal, Ticket-Kategorie und Log-Kanal aus.', 'warn');
+    const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/ticket`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.ok) return showDashboardMessage(result.error || 'Ticket-System konnte nicht gespeichert werden.', 'error');
+    ticketDirty = false;
+    if (result.config) renderTicketConfig({ ticket: result.config }, dashboardChannels, dashboardCategoryChannels);
+    showDashboardMessage('Ticket-System wird vom Bot eingerichtet und das Panel wird gesendet/aktualisiert.', 'success');
+  });
 
   function resetMessageBuilder() {
     selectedDashboardMessageId = null;
