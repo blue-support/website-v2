@@ -56,6 +56,8 @@ const DASHBOARD_GLOBALCHAT_CONFIG_FILE = path.join(DATA_DIR, 'dashboard-globalch
 const DASHBOARD_GLOBALCHAT_ACTION_FILE = path.join(DATA_DIR, 'dashboard-globalchat-actions.json');
 const DASHBOARD_MESSAGES_CONFIG_FILE = path.join(DATA_DIR, 'dashboard-messages-configs.json');
 const DASHBOARD_MESSAGES_ACTION_FILE = path.join(DATA_DIR, 'dashboard-messages-actions.json');
+const DASHBOARD_TICKET_CONFIG_FILE = path.join(DATA_DIR, 'dashboard-ticket-configs.json');
+const DASHBOARD_TICKET_ACTION_FILE = path.join(DATA_DIR, 'dashboard-ticket-actions.json');
 fs.mkdirSync(TICKET_UPLOAD_DIR, { recursive: true });
 
 const ticketUploadStorage = multer.diskStorage({
@@ -796,6 +798,47 @@ function saveDashboardMessagesActions(data) {
   saveJson(DASHBOARD_MESSAGES_ACTION_FILE, data);
 }
 
+function loadDashboardTicketConfigs() {
+  const data = loadJson(DASHBOARD_TICKET_CONFIG_FILE, { configs: {} });
+  if (!data.configs || typeof data.configs !== 'object') data.configs = {};
+  return data;
+}
+
+function saveDashboardTicketConfigs(data) {
+  if (!data.configs || typeof data.configs !== 'object') data.configs = {};
+  saveJson(DASHBOARD_TICKET_CONFIG_FILE, data);
+}
+
+function loadDashboardTicketActions() {
+  const data = loadJson(DASHBOARD_TICKET_ACTION_FILE, { actions: [] });
+  if (!Array.isArray(data.actions)) data.actions = [];
+  return data;
+}
+
+function saveDashboardTicketActions(data) {
+  if (!Array.isArray(data.actions)) data.actions = [];
+  saveJson(DASHBOARD_TICKET_ACTION_FILE, data);
+}
+
+function dashboardPublicTicketConfig(config) {
+  if (!config || typeof config !== 'object') return null;
+  return {
+    guildId: String(config.guildId || ''),
+    panelChannelId: config.panelChannelId ? String(config.panelChannelId) : '',
+    ticketCategoryId: config.ticketCategoryId ? String(config.ticketCategoryId) : '',
+    logChannelId: config.logChannelId ? String(config.logChannelId) : '',
+    categories: Array.isArray(config.categories) ? config.categories.map((category, index) => ({
+      id: String(category.id || `cat_${index + 1}`),
+      name: String(category.name || '').slice(0, 50),
+      roleIds: Array.isArray(category.roleIds || category.role_ids) ? (category.roleIds || category.role_ids).map(String) : [],
+    })).filter((category) => category.name) : [],
+    panelMessageId: config.panelMessageId ? String(config.panelMessageId) : null,
+    status: config.status || 'saved',
+    lastResult: config.lastResult || null,
+    updatedAt: config.updatedAt || null,
+  };
+}
+
 function dashboardPublicMessage(message) {
   if (!message || typeof message !== 'object') return null;
   return {
@@ -944,16 +987,89 @@ app.get('/api/dashboard/guild/:guildId', requireUser, (req, res) => {
   const verifyConfigs = loadDashboardVerifyConfigs().configs;
   const globalchatConfigs = loadDashboardGlobalchatConfigs().configs;
   const messagesConfigs = loadDashboardMessagesConfigs().guilds;
+  const ticketConfigs = loadDashboardTicketConfigs().configs;
   res.json({
     ok: true,
     guild: common.botGuild,
     access: dashboardAccessFor(req.session.discordUser.id, guildId),
     verification: verifyConfigs[guildId] || null,
     globalchat: globalchatConfigs[guildId] || common.botGuild.globalchat || null,
+    ticket: dashboardPublicTicketConfig(ticketConfigs[guildId] || common.botGuild.ticket || null),
     messages: { messages: (messagesConfigs[guildId]?.messages || []).map(dashboardPublicMessage).filter(Boolean) }
   });
 });
 
+
+
+app.post('/api/dashboard/guild/:guildId/ticket', requireUser, (req, res) => {
+  const guildId = String(req.params.guildId || '').replace(/\D/g, '');
+  const common = dashboardCommonGuild(req, guildId);
+  if (!common) return res.status(403).json({ ok: false, error: 'Nicht verfügbar - Administrator benötigt. Du brauchst Administratorrechte auf diesem Server.' });
+
+  const access = dashboardAccessFor(req.session.discordUser.id, guildId);
+  if (access.checked && access.canManage === false) return res.status(403).json({ ok: false, error: 'Der Bot konnte deine Administratorrechte auf diesem Server nicht bestätigen.' });
+
+  const botGuild = common.botGuild;
+  const textChannelIds = new Set((botGuild.channels || []).filter((channel) => ['text', 'news'].includes(channel.type)).map((channel) => String(channel.id)));
+  const categoryChannelIds = new Set((botGuild.channels || []).filter((channel) => channel.type === 'category').map((channel) => String(channel.id)));
+  const roleIds = new Set((botGuild.roles || []).filter((role) => !role.managed && !role.default).map((role) => String(role.id)));
+  const body = req.body || {};
+
+  const panelChannelId = String(body.panelChannelId || '').replace(/\D/g, '');
+  const ticketCategoryId = String(body.ticketCategoryId || '').replace(/\D/g, '');
+  const logChannelId = String(body.logChannelId || '').replace(/\D/g, '');
+
+  if (!textChannelIds.has(panelChannelId)) return res.status(400).json({ ok: false, error: 'Bitte wähle einen gültigen Panel-Textkanal.' });
+  if (!categoryChannelIds.has(ticketCategoryId)) return res.status(400).json({ ok: false, error: 'Bitte wähle eine gültige Discord-Kategorie für neue Ticket-Kanäle.' });
+  if (!textChannelIds.has(logChannelId)) return res.status(400).json({ ok: false, error: 'Bitte wähle einen gültigen Ticket-Log-Kanal.' });
+
+  const rawCategories = Array.isArray(body.categories) ? body.categories : [];
+  const categories = [];
+  rawCategories.slice(0, 5).forEach((category) => {
+    const name = dashboardSanitizeText(category?.name, 50);
+    if (!name) return;
+    const categoryRoleIds = Array.isArray(category?.roleIds || category?.role_ids) ? (category.roleIds || category.role_ids) : [];
+    const cleanedRoleIds = [...new Set(categoryRoleIds.map((roleId) => String(roleId || '').replace(/\D/g, '')).filter((roleId) => roleIds.has(roleId)))];
+    categories.push({
+      id: `cat_${categories.length + 1}`,
+      name,
+      roleIds: cleanedRoleIds,
+    });
+  });
+
+  if (!categories.length) return res.status(400).json({ ok: false, error: 'Bitte erstelle mindestens eine Ticket-Kategorie.' });
+  if (categories.some((category) => !category.roleIds.length)) return res.status(400).json({ ok: false, error: 'Jede Ticket-Kategorie braucht mindestens eine Team-Rolle.' });
+
+  const configs = loadDashboardTicketConfigs();
+  const oldConfig = configs.configs[guildId] || {};
+  const now = new Date().toISOString();
+  const config = {
+    ...oldConfig,
+    guildId,
+    panelChannelId,
+    ticketCategoryId,
+    logChannelId,
+    categories,
+    updatedBy: req.session.discordUser,
+    updatedAt: now,
+    status: 'pending_apply'
+  };
+  configs.configs[guildId] = config;
+  saveDashboardTicketConfigs(configs);
+
+  const actions = loadDashboardTicketActions();
+  actions.actions.push({
+    id: `ticket_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
+    type: 'apply_ticket_setup',
+    guildId,
+    config,
+    status: 'pending',
+    createdAt: now
+  });
+  saveDashboardTicketActions(actions);
+
+  res.json({ ok: true, config: dashboardPublicTicketConfig(config), message: 'Ticket-System wird vom Bot eingerichtet und das Panel wird gesendet/aktualisiert.' });
+});
 
 app.post('/api/dashboard/guild/:guildId/messages', requireUser, (req, res) => {
   const guildId = String(req.params.guildId || '').replace(/\D/g, '');
@@ -1219,6 +1335,36 @@ app.post('/api/dashboard/bot/access-cache', requireDashboardBot, (req, res) => {
 });
 
 
+
+app.get('/api/dashboard/bot/ticket-actions', requireDashboardBot, (_req, res) => {
+  const data = loadDashboardTicketActions();
+  const actions = data.actions.filter((action) => action.status === 'pending');
+  res.json({ ok: true, actions });
+});
+
+app.post('/api/dashboard/bot/ticket-action-result', requireDashboardBot, (req, res) => {
+  const id = String(req.body?.id || '');
+  const data = loadDashboardTicketActions();
+  const action = data.actions.find((item) => item.id === id);
+  if (!action) return res.status(404).json({ ok: false, error: 'Action nicht gefunden.' });
+  action.status = req.body?.ok ? 'done' : 'error';
+  action.result = req.body || {};
+  action.finishedAt = new Date().toISOString();
+  saveDashboardTicketActions(data);
+
+  if (action.type === 'apply_ticket_setup' && action.guildId) {
+    const configs = loadDashboardTicketConfigs();
+    if (configs.configs[action.guildId]) {
+      configs.configs[action.guildId].status = action.status;
+      configs.configs[action.guildId].lastResult = req.body;
+      configs.configs[action.guildId].panelMessageId = req.body.panelMessageId || configs.configs[action.guildId].panelMessageId || null;
+      configs.configs[action.guildId].updatedAt = new Date().toISOString();
+      saveDashboardTicketConfigs(configs);
+    }
+  }
+  res.json({ ok: true });
+});
+
 app.get('/api/dashboard/bot/message-actions', requireDashboardBot, (_req, res) => {
   const data = loadDashboardMessagesActions();
   const actions = data.actions.filter((action) => action.status === 'pending');
@@ -1315,10 +1461,12 @@ app.post('/api/dashboard/bot/saved-configs', requireDashboardBot, (req, res) => 
   const verifyConfigs = req.body?.verifyConfigs && typeof req.body.verifyConfigs === 'object' ? req.body.verifyConfigs : {};
   const globalchatConfigs = req.body?.globalchatConfigs && typeof req.body.globalchatConfigs === 'object' ? req.body.globalchatConfigs : {};
   const messagesConfigs = req.body?.messagesConfigs && typeof req.body.messagesConfigs === 'object' ? req.body.messagesConfigs : {};
+  const ticketConfigs = req.body?.ticketConfigs && typeof req.body.ticketConfigs === 'object' ? req.body.ticketConfigs : {};
 
   let verifyCount = 0;
   let globalchatCount = 0;
   let messagesCount = 0;
+  let ticketCount = 0;
 
   if (Object.keys(verifyConfigs).length) {
     const data = loadDashboardVerifyConfigs();
@@ -1370,6 +1518,25 @@ app.post('/api/dashboard/bot/saved-configs', requireDashboardBot, (req, res) => 
   }
 
 
+  if (Object.keys(ticketConfigs).length) {
+    const data = loadDashboardTicketConfigs();
+    for (const [guildIdRaw, configRaw] of Object.entries(ticketConfigs)) {
+      const guildId = String(guildIdRaw || '').replace(/\D/g, '');
+      if (!guildId || !configRaw || typeof configRaw !== 'object') continue;
+      data.configs[guildId] = {
+        ...(data.configs[guildId] || {}),
+        ...configRaw,
+        guildId,
+        restoredFromBot: true,
+        status: configRaw.status || data.configs[guildId]?.status || 'done',
+        updatedAt: configRaw.updatedAt || data.configs[guildId]?.updatedAt || new Date().toISOString()
+      };
+      ticketCount += 1;
+    }
+    saveDashboardTicketConfigs(data);
+  }
+
+
   if (Object.keys(messagesConfigs).length) {
     const data = loadDashboardMessagesConfigs();
     for (const [guildIdRaw, guildRaw] of Object.entries(messagesConfigs)) {
@@ -1411,7 +1578,7 @@ app.post('/api/dashboard/bot/saved-configs', requireDashboardBot, (req, res) => 
     saveDashboardMessagesConfigs(data);
   }
 
-  res.json({ ok: true, verifyCount, globalchatCount, messagesCount });
+  res.json({ ok: true, verifyCount, globalchatCount, messagesCount, ticketCount });
 });
 
 function loadApplications() {

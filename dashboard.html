@@ -93,7 +93,7 @@
               <button class="dashboard-dept" type="button" data-dashboard-section="globalchat"><span>🌍</span><strong>Globalchat</strong><small>Öffnen</small></button>
               <button class="dashboard-dept" type="button" data-dashboard-section="moderation"><span>🛡️</span><strong>Moderation</strong><small>Bald...</small></button>
               <button class="dashboard-dept" type="button" data-dashboard-section="security"><span>🔒</span><strong>Security</strong><small>Bald...</small></button>
-              <button class="dashboard-dept" type="button" data-dashboard-section="ticket"><span>🎫</span><strong>Ticket</strong><small>Bald...</small></button>
+              <button class="dashboard-dept" type="button" data-dashboard-section="ticket"><span>🎫</span><strong>Ticket</strong><small>Öffnen</small></button>
               <button class="dashboard-dept active" type="button" data-dashboard-section="verification"><span>✅</span><strong>Verification</strong><small>Öffnen</small></button>
             </div>
 
@@ -202,6 +202,56 @@
                   <div class="feature-preview-line"><strong>Kanal:</strong> <span data-dashboard-globalchat-preview>Kanal auswählen</span></div>
                   <small>Powered by Blue ⚡</small>
                 </aside>
+              </div>
+            </form>
+
+            <form class="dashboard-ticket-form dashboard-feature-form" data-dashboard-ticket-form hidden>
+              <div class="verify-toolbar">
+                <div>
+                  <span class="eyebrow">Ticket</span>
+                  <h3>Ticket-System Setup</h3>
+                  <p>Richte das normale Discord Ticket-Panel direkt über das Dashboard ein. Slash-Command Setup wird nicht mehr benötigt.</p>
+                </div>
+                <span class="chip" data-dashboard-ticket-status>Nicht eingerichtet</span>
+              </div>
+
+              <div class="ticket-dashboard-layout">
+                <section class="verify-config-card ticket-base-card">
+                  <span class="eyebrow">Grundsetup</span>
+                  <h3>Kanäle & Kategorien</h3>
+                  <div class="form-row">
+                    <label>Panel-Kanal<select name="ticketPanelChannelId" data-dashboard-ticket-panel-channel required></select><small>Hier wird das öffentliche Ticket-Panel gesendet.</small></label>
+                    <label>Ticket-Kategorie<select name="ticketCategoryId" data-dashboard-ticket-category-select required></select><small>Neue Ticket-Kanäle werden in dieser Discord-Kategorie erstellt.</small></label>
+                  </div>
+                  <label>Ticket Log-Kanal<select name="ticketLogChannelId" data-dashboard-ticket-log-channel required></select><small>Logs für neue Tickets, Claims, Freigaben und Schließungen.</small></label>
+                </section>
+
+                <section class="verify-config-card ticket-categories-card">
+                  <div class="role-picker-title">
+                    <div>
+                      <span class="eyebrow">Ticket Kategorien</span>
+                      <h3>Kategorien & Team-Rollen</h3>
+                    </div>
+                    <button class="btn ghost" type="button" data-dashboard-ticket-add-category>+ Kategorie</button>
+                  </div>
+                  <p class="muted compact">Du kannst bis zu 5 Kategorien erstellen. Jede Kategorie braucht mindestens eine Team-Rolle.</p>
+                  <div class="ticket-category-list" data-dashboard-ticket-category-list></div>
+                </section>
+
+                <aside class="verify-preview-card feature-preview-card ticket-preview-card">
+                  <span class="eyebrow">Vorschau</span>
+                  <h3>🎫 Blue Support Center</h3>
+                  <p>Das Panel nutzt weiterhin dein bestehendes Ticket-System mit Auswahlmenü, Ticket-Kanal, Claim/Freigeben und Schließen.</p>
+                  <div class="feature-preview-line"><strong>Panel:</strong> <span data-dashboard-ticket-panel-preview>Kanal auswählen</span></div>
+                  <div class="feature-preview-line"><strong>Neue Tickets:</strong> <span data-dashboard-ticket-category-preview>Kategorie auswählen</span></div>
+                  <div class="feature-preview-line"><strong>Logs:</strong> <span data-dashboard-ticket-log-preview>Kanal auswählen</span></div>
+                  <div class="dashboard-ticket-preview-categories" data-dashboard-ticket-preview-categories></div>
+                  <small>Powered by Blue ⚡</small>
+                </aside>
+              </div>
+
+              <div class="form-actions form-actions-wide">
+                <button class="btn primary" type="submit">Ticket-System speichern & Panel senden</button>
               </div>
             </form>
 
