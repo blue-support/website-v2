@@ -106,6 +106,19 @@ async function loadLiveData() {
   }
 }
 
+
+function ensureMemorialNavLink() {
+  const nav = $('[data-nav]');
+  if (!nav || nav.querySelector('a[href="memorial.html"]')) return;
+  const link = document.createElement('a');
+  link.href = 'memorial.html';
+  link.className = 'nav-memorial';
+  link.textContent = '🕊 Kuba';
+  const dashboard = nav.querySelector('a[href="dashboard.html"]');
+  if (dashboard && dashboard.nextSibling) nav.insertBefore(link, dashboard.nextSibling);
+  else nav.appendChild(link);
+}
+
 function initNavigation() {
   const toggle = $('[data-nav-toggle]');
   const nav = $('[data-nav]');
@@ -235,6 +248,7 @@ function initSupportRedirect() {
   }, 900);
 }
 
+ensureMemorialNavLink();
 initNavigation();
 initReveal();
 initTilt();
