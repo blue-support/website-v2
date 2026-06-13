@@ -297,13 +297,64 @@
                   </div>
                 </section>
 
+                <section class="verify-config-card feature-primary-card security-config-card security-language-card">
+                  <span class="eyebrow">Sprache</span>
+                  <h3>Server-Sprache</h3>
+                  <label class="switch-line premium-glow-soft"><input type="checkbox" name="securityLanguageEnabled"><span>Sprachschutz aktivieren</span></label>
+                  <p class="muted compact">Blue löscht Nachrichten, wenn mehr als 3 Wörter eindeutig aus einer anderen Sprache erkannt werden.</p>
+                  <label>Bevorzugte Sprache
+                    <select name="securityPreferredLanguage" data-dashboard-security-language-select>
+                      <option value="de">Deutsch</option>
+                      <option value="en">Englisch</option>
+                      <option value="tr">Türkisch</option>
+                      <option value="pl">Polnisch</option>
+                      <option value="fr">Französisch</option>
+                      <option value="es">Spanisch</option>
+                      <option value="it">Italienisch</option>
+                      <option value="nl">Niederländisch</option>
+                    </select>
+                    <small>Kurze Nachrichten und einzelne Fremdwörter werden nicht direkt gelöscht.</small>
+                  </label>
+
+                  <div class="security-picker-block">
+                    <div class="role-picker-title">
+                      <div>
+                        <span class="eyebrow">Ignorierte Rollen</span>
+                        <h3>Rollen mit Sprach-Ausnahme</h3>
+                      </div>
+                      <span class="mini-counter" data-dashboard-security-language-role-count>0</span>
+                    </div>
+                    <p class="muted compact">Optional: Diese Rollen dürfen in anderen Sprachen schreiben.</p>
+                    <div class="role-chip-grid" data-dashboard-security-language-role-picker></div>
+                    <div class="selected-role-box" data-dashboard-security-language-selected-roles><span class="muted">Keine Rolle ignoriert</span></div>
+                  </div>
+
+                  <div class="security-picker-block">
+                    <div class="role-picker-title">
+                      <div>
+                        <span class="eyebrow">Ignorierte Kanäle</span>
+                        <h3>Kanäle mit Sprach-Ausnahme</h3>
+                      </div>
+                      <span class="mini-counter" data-dashboard-security-language-channel-count>0</span>
+                    </div>
+                    <p class="muted compact">Optional: In diesen Kanälen sind andere Sprachen erlaubt.</p>
+                    <div class="role-chip-grid" data-dashboard-security-language-channel-picker></div>
+                    <div class="selected-role-box" data-dashboard-security-language-selected-channels><span class="muted">Kein Kanal ignoriert</span></div>
+                  </div>
+                </section>
+
                 <aside class="verify-preview-card feature-preview-card security-preview-card">
                   <span class="eyebrow">Vorschau</span>
-                  <h3>🔒 Link Security</h3>
-                  <p>Blue prüft neue Nachrichten und entfernt HTTPS-Links automatisch, wenn keine Ausnahme greift.</p>
-                  <div class="feature-preview-line"><strong>Status:</strong> <span data-dashboard-security-enabled-preview>Nicht aktiv</span></div>
-                  <div class="feature-preview-line"><strong>Erlaubte Rollen:</strong> <span data-dashboard-security-roles-preview>Keine</span></div>
-                  <div class="feature-preview-line"><strong>Erlaubte Kanäle:</strong> <span data-dashboard-security-channels-preview>Keine</span></div>
+                  <h3>🔒 Security</h3>
+                  <p>Blue prüft neue Nachrichten und entfernt Inhalte automatisch, wenn keine Ausnahme greift.</p>
+                  <div class="feature-preview-line"><strong>Links:</strong> <span data-dashboard-security-enabled-preview>Nicht aktiv</span></div>
+                  <div class="feature-preview-line"><strong>Link-Rollen:</strong> <span data-dashboard-security-roles-preview>Keine</span></div>
+                  <div class="feature-preview-line"><strong>Link-Kanäle:</strong> <span data-dashboard-security-channels-preview>Keine</span></div>
+                  <hr class="soft-divider">
+                  <div class="feature-preview-line"><strong>Sprache:</strong> <span data-dashboard-security-language-enabled-preview>Nicht aktiv</span></div>
+                  <div class="feature-preview-line"><strong>Bevorzugt:</strong> <span data-dashboard-security-language-preview>Deutsch</span></div>
+                  <div class="feature-preview-line"><strong>Sprach-Rollen:</strong> <span data-dashboard-security-language-roles-preview>Keine</span></div>
+                  <div class="feature-preview-line"><strong>Sprach-Kanäle:</strong> <span data-dashboard-security-language-channels-preview>Keine</span></div>
                   <small>Powered by Blue ⚡</small>
                 </aside>
               </div>

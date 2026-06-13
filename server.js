@@ -874,15 +874,29 @@ function saveDashboardSecurityActions(data) {
   saveJson(DASHBOARD_SECURITY_ACTION_FILE, data);
 }
 
+const DASHBOARD_SECURITY_LANGUAGES = new Set(['de', 'en', 'tr', 'pl', 'fr', 'es', 'it', 'nl']);
+
+function normalizeDashboardSecurityLanguage(value) {
+  const lang = String(value || 'de').toLowerCase().replace(/[^a-z]/g, '').slice(0, 2);
+  return DASHBOARD_SECURITY_LANGUAGES.has(lang) ? lang : 'de';
+}
+
 function dashboardPublicSecurityConfig(config) {
   if (!config || typeof config !== 'object') return null;
   const links = config.links || {};
+  const language = config.language || config.languages || {};
   return {
     guildId: String(config.guildId || ''),
     links: {
       enabled: Boolean(links.enabled),
       ignoredRoleIds: Array.isArray(links.ignoredRoleIds || links.ignored_role_ids) ? (links.ignoredRoleIds || links.ignored_role_ids).map((id) => String(id || '').replace(/\D/g, '')).filter(Boolean) : [],
       ignoredChannelIds: Array.isArray(links.ignoredChannelIds || links.ignored_channel_ids) ? (links.ignoredChannelIds || links.ignored_channel_ids).map((id) => String(id || '').replace(/\D/g, '')).filter(Boolean) : [],
+    },
+    language: {
+      enabled: Boolean(language.enabled),
+      preferred: normalizeDashboardSecurityLanguage(language.preferred || language.preferredLanguage || language.language || 'de'),
+      ignoredRoleIds: Array.isArray(language.ignoredRoleIds || language.ignored_role_ids) ? (language.ignoredRoleIds || language.ignored_role_ids).map((id) => String(id || '').replace(/\D/g, '')).filter(Boolean) : [],
+      ignoredChannelIds: Array.isArray(language.ignoredChannelIds || language.ignored_channel_ids) ? (language.ignoredChannelIds || language.ignored_channel_ids).map((id) => String(id || '').replace(/\D/g, '')).filter(Boolean) : [],
     },
     status: config.status || 'saved',
     lastResult: config.lastResult || null,
@@ -1204,14 +1218,23 @@ app.post('/api/dashboard/guild/:guildId/security', requireUser, (req, res) => {
   const availableRoleIds = new Set((botGuild.roles || []).filter((role) => !role.default && !role.managed).map((role) => String(role.id)));
   const availableChannelIds = new Set((botGuild.channels || []).filter((channel) => ['text', 'news', 'forum'].includes(String(channel.type).toLowerCase())).map((channel) => String(channel.id)));
   const links = req.body?.links || {};
+  const language = req.body?.language || {};
   const ignoredRoleIds = Array.isArray(links.ignoredRoleIds) ? links.ignoredRoleIds.map((id) => String(id || '').replace(/\D/g, '')).filter((id) => id && availableRoleIds.has(id)) : [];
   const ignoredChannelIds = Array.isArray(links.ignoredChannelIds) ? links.ignoredChannelIds.map((id) => String(id || '').replace(/\D/g, '')).filter((id) => id && availableChannelIds.has(id)) : [];
+  const languageIgnoredRoleIds = Array.isArray(language.ignoredRoleIds) ? language.ignoredRoleIds.map((id) => String(id || '').replace(/\D/g, '')).filter((id) => id && availableRoleIds.has(id)) : [];
+  const languageIgnoredChannelIds = Array.isArray(language.ignoredChannelIds) ? language.ignoredChannelIds.map((id) => String(id || '').replace(/\D/g, '')).filter((id) => id && availableChannelIds.has(id)) : [];
   const config = {
     guildId,
     links: {
       enabled: Boolean(links.enabled),
       ignoredRoleIds: Array.from(new Set(ignoredRoleIds)),
       ignoredChannelIds: Array.from(new Set(ignoredChannelIds)),
+    },
+    language: {
+      enabled: Boolean(language.enabled),
+      preferred: normalizeDashboardSecurityLanguage(language.preferred),
+      ignoredRoleIds: Array.from(new Set(languageIgnoredRoleIds)),
+      ignoredChannelIds: Array.from(new Set(languageIgnoredChannelIds)),
     },
     updatedBy: { id: req.session.discordUser.id, username: req.session.discordUser.username },
     updatedAt: new Date().toISOString(),
