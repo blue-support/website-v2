@@ -721,6 +721,7 @@ async function initDashboardPage() {
   const messagesForm = $('[data-dashboard-messages-form]');
   const ticketForm = $('[data-dashboard-ticket-form]');
   const moderationForm = $('[data-dashboard-moderation-form]');
+  const funForm = $('[data-dashboard-fun-form]');
   const soon = $('[data-dashboard-soon]');
   let selectedGuildId = null;
   let selectedGuildData = null;
@@ -736,6 +737,7 @@ async function initDashboardPage() {
   let globalchatDirty = false;
   let ticketDirty = false;
   let moderationDirty = false;
+  let funDirty = false;
   let moderationRolePermissions = [];
   const moderationCommands = [
     { id: 'ban', label: 'Ban' },
@@ -1335,6 +1337,7 @@ async function initDashboardPage() {
     renderGlobalchatConfig(data, globalchatChannels);
     renderTicketConfig(data, globalchatChannels, categoryChannels);
     renderModerationConfig(data, globalchatChannels);
+    renderFunConfig(data, globalchatChannels);
     renderMessagesConfig(data, globalchatChannels);
     if (data.verification?.mode) {
       const modeInput = form.querySelector(`[name="mode"][value="${data.verification.mode}"]`);
@@ -1445,6 +1448,8 @@ async function initDashboardPage() {
   ticketForm?.addEventListener('change', () => { ticketDirty = true; updateTicketPreview(); });
   moderationForm?.addEventListener('input', () => { moderationDirty = true; updateModerationPreview(); });
   moderationForm?.addEventListener('change', () => { moderationDirty = true; updateModerationPreview(); });
+  funForm?.addEventListener('input', () => { funDirty = true; updateFunPreview(); });
+  funForm?.addEventListener('change', () => { funDirty = true; updateFunPreview(); });
   messagesForm?.addEventListener('input', () => { messagesDirty = true; updateMessagePreview(); });
   messagesForm?.addEventListener('change', () => { messagesDirty = true; updateMessagePreview(); });
   $('[data-dashboard-refresh]')?.addEventListener('click', async () => {
@@ -1459,8 +1464,9 @@ async function initDashboardPage() {
       if (globalchatForm) globalchatForm.hidden = section !== 'globalchat';
       if (ticketForm) ticketForm.hidden = section !== 'ticket';
       if (moderationForm) moderationForm.hidden = section !== 'moderation';
+      if (funForm) funForm.hidden = section !== 'fun';
       if (messagesForm) messagesForm.hidden = section !== 'messages';
-      if (section === 'verification' || section === 'globalchat' || section === 'messages' || section === 'ticket' || section === 'moderation') {
+      if (section === 'verification' || section === 'globalchat' || section === 'messages' || section === 'ticket' || section === 'moderation' || section === 'fun') {
         if (soon) soon.hidden = true;
       } else if (soon) {
         soon.hidden = false;
@@ -1470,6 +1476,41 @@ async function initDashboardPage() {
   });
 
 
+
+
+  funForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!selectedGuildId) return dashboardNotify(null, 'Bitte wähle zuerst einen Server.', 'warn');
+    const formData = new FormData(funForm);
+    const payload = {
+      counting: {
+        enabled: formData.get('countingEnabled') === 'on',
+        channelId: formData.get('countingChannelId') || '',
+      },
+      errate: {
+        enabled: formData.get('errateEnabled') === 'on',
+        channelId: formData.get('errateChannelId') || '',
+      },
+      anonym: {
+        enabled: formData.get('anonymEnabled') === 'on',
+        channelId: formData.get('anonymChannelId') || '',
+        logChannelId: formData.get('anonymLogChannelId') || '',
+      }
+    };
+    if (payload.counting.enabled && !payload.counting.channelId) return dashboardNotify('fun', 'Bitte wähle einen Counting-Kanal oder deaktiviere Counting.', 'warn');
+    if (payload.errate.enabled && !payload.errate.channelId) return dashboardNotify('fun', 'Bitte wähle einen Errate-Zahl-Kanal oder deaktiviere Errate-Zahl.', 'warn');
+    if (payload.anonym.enabled && !payload.anonym.channelId) return dashboardNotify('fun', 'Bitte wähle einen Anonym-Chat-Kanal oder deaktiviere Anonym-Chat.', 'warn');
+    const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/fun`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.ok) return dashboardNotify('fun', result.error || 'Fun Systeme konnten nicht gespeichert werden.', 'error');
+    funDirty = false;
+    if (result.config) renderFunConfig({ fun: result.config }, dashboardChannels);
+    dashboardNotify('fun', 'Fun Systeme gespeichert. Blue übernimmt jetzt Counting, Errate-Zahl und Anonym-Chat.', 'success');
+  });
 
   $('[data-dashboard-moderation-add-role]')?.addEventListener('click', () => {
     if (moderationRolePermissions.length >= 5) return dashboardNotify('moderation', 'Maximal 5 Mod-Rollen sind möglich.', 'warn');
