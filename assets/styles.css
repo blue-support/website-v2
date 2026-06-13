@@ -1921,3 +1921,44 @@ img,video,canvas{max-width:100%}
 @media (max-width: 860px) {
   .fun-system-card { padding: 14px; }
 }
+
+
+/* Dashboard Community Module */
+.community-layout-grid {
+  align-items: stretch;
+}
+.community-config-card .role-chip-grid {
+  max-height: 360px;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, .16);
+  border-radius: 18px;
+  background: rgba(15, 23, 42, .36);
+}
+.community-selected-roles {
+  margin-top: 14px;
+}
+.mini-counter {
+  min-width: 52px;
+  text-align: center;
+  padding: 7px 10px;
+  border: 1px solid rgba(56, 189, 248, .22);
+  border-radius: 999px;
+  background: rgba(56, 189, 248, .09);
+  color: #bae6fd;
+  font-weight: 800;
+  font-size: .8rem;
+}
+.dashboard-community-preview-roles {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+.community-preview-card {
+  min-height: 320px;
+}
+@media (max-width: 900px) {
+  .community-config-card .role-chip-grid {
+    max-height: none;
+  }
+}

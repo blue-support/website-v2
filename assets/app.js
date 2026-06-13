@@ -722,6 +722,7 @@ async function initDashboardPage() {
   const ticketForm = $('[data-dashboard-ticket-form]');
   const moderationForm = $('[data-dashboard-moderation-form]');
   const funForm = $('[data-dashboard-fun-form]');
+  const communityForm = $('[data-dashboard-community-form]');
   const soon = $('[data-dashboard-soon]');
   let selectedGuildId = null;
   let selectedGuildData = null;
@@ -738,6 +739,8 @@ async function initDashboardPage() {
   let ticketDirty = false;
   let moderationDirty = false;
   let funDirty = false;
+  let communityDirty = false;
+  let communityRoleIds = new Set();
   let moderationRolePermissions = [];
   const moderationCommands = [
     { id: 'ban', label: 'Ban' },
@@ -1390,6 +1393,89 @@ async function initDashboardPage() {
     updateFunPreview();
   }
 
+
+
+  function updateCommunityPreview() {
+    if (!communityForm) return;
+    const formData = new FormData(communityForm);
+    const channelPreview = $('[data-dashboard-community-channel-preview]');
+    const rolePreview = $('[data-dashboard-community-preview-roles]');
+    const status = $('[data-dashboard-community-status]');
+    if (channelPreview) channelPreview.textContent = dashboardChannelName(formData.get('communityTeamlistChannelId'), 'Kanal auswählen');
+    const selectedRoles = dashboardRoles.filter((role) => communityRoleIds.has(String(role.id)));
+    if (rolePreview) {
+      rolePreview.innerHTML = selectedRoles.length
+        ? selectedRoles.map((role, index) => `<div class="feature-preview-line"><strong>${index + 1}.</strong> <span>@${escapeHtml(role.name)}</span></div>`).join('')
+        : '<p class="muted compact">Noch keine Rollen gewählt.</p>';
+    }
+    if (status) {
+      status.textContent = selectedRoles.length ? `${selectedRoles.length} Rolle(n)` : 'Nicht eingerichtet';
+      status.classList.toggle('online', selectedRoles.length > 0);
+    }
+    const count = $('[data-dashboard-community-role-count]');
+    if (count) count.textContent = `${selectedRoles.length}/10`;
+  }
+
+  function renderCommunitySelectedRoles() {
+    const container = $('[data-dashboard-community-selected]');
+    if (!container) return;
+    const selectedRoles = dashboardRoles.filter((role) => communityRoleIds.has(String(role.id)));
+    if (!selectedRoles.length) {
+      container.innerHTML = '<span class="muted">Keine Rolle gewählt</span>';
+      return;
+    }
+    container.innerHTML = selectedRoles.map((role) => `<button class="selected-role-tag" type="button" data-community-remove-role="${escapeHtml(role.id)}"${roleColorStyle(role)}><span>@${escapeHtml(role.name)}</span><b aria-hidden="true">×</b></button>`).join('');
+    $$('[data-community-remove-role]', container).forEach((button) => {
+      button.addEventListener('click', () => {
+        communityRoleIds.delete(String(button.dataset.communityRemoveRole));
+        communityDirty = true;
+        renderCommunityRolePicker();
+      });
+    });
+  }
+
+  function renderCommunityRolePicker() {
+    const container = $('[data-dashboard-community-role-picker]');
+    if (!container) return;
+    if (!dashboardRoles.length) {
+      container.innerHTML = '<p class="muted">Keine Rollen gefunden. Prüfe die Bot-Berechtigungen.</p>';
+      renderCommunitySelectedRoles();
+      updateCommunityPreview();
+      return;
+    }
+    container.innerHTML = dashboardRoles.map((role) => {
+      const id = String(role.id);
+      const active = communityRoleIds.has(id);
+      return `<button class="role-chip ${active ? 'active' : ''}" type="button" data-community-role-chip="${escapeHtml(id)}"${roleColorStyle(role)}><span class="role-dot"></span>@${escapeHtml(role.name)}</button>`;
+    }).join('');
+    $$('[data-community-role-chip]', container).forEach((button) => {
+      button.addEventListener('click', () => {
+        const id = String(button.dataset.communityRoleChip || '');
+        if (!id) return;
+        if (communityRoleIds.has(id)) {
+          communityRoleIds.delete(id);
+        } else {
+          if (communityRoleIds.size >= 10) return dashboardNotify('community', 'Maximal 10 Rollen sind möglich.', 'warn');
+          communityRoleIds.add(id);
+        }
+        communityDirty = true;
+        renderCommunityRolePicker();
+      });
+    });
+    renderCommunitySelectedRoles();
+    updateCommunityPreview();
+  }
+
+  function renderCommunityConfig(data, channels = dashboardChannels) {
+    if (!communityForm) return;
+    const config = data.community || {};
+    const teamlist = config.teamlist || config || {};
+    setDashboardSelectOptions('[data-dashboard-community-channel]', channels, teamlist.channelId || config.channelId || '', 'Kanal auswählen');
+    communityRoleIds = new Set((teamlist.roleIds || config.roleIds || config.roles || []).map(String).filter(Boolean).slice(0, 10));
+    communityDirty = false;
+    renderCommunityRolePicker();
+  }
+
   function renderGuildConfig(data) {
     selectedGuildData = data.guild;
     access = data.access || { checked: false, hasPremiumFooter: false };
@@ -1416,6 +1502,7 @@ async function initDashboardPage() {
     renderTicketConfig(data, globalchatChannels, categoryChannels);
     renderModerationConfig(data, globalchatChannels);
     renderFunConfig(data, globalchatChannels);
+    renderCommunityConfig(data, globalchatChannels);
     renderMessagesConfig(data, globalchatChannels);
     if (data.verification?.mode) {
       const modeInput = form.querySelector(`[name="mode"][value="${data.verification.mode}"]`);
@@ -1528,6 +1615,8 @@ async function initDashboardPage() {
   moderationForm?.addEventListener('change', () => { moderationDirty = true; updateModerationPreview(); });
   funForm?.addEventListener('input', () => { funDirty = true; updateFunPreview(); });
   funForm?.addEventListener('change', () => { funDirty = true; updateFunPreview(); });
+  communityForm?.addEventListener('input', () => { communityDirty = true; updateCommunityPreview(); });
+  communityForm?.addEventListener('change', () => { communityDirty = true; updateCommunityPreview(); });
   messagesForm?.addEventListener('input', () => { messagesDirty = true; updateMessagePreview(); });
   messagesForm?.addEventListener('change', () => { messagesDirty = true; updateMessagePreview(); });
   $('[data-dashboard-refresh]')?.addEventListener('click', async () => {
@@ -1543,8 +1632,9 @@ async function initDashboardPage() {
       if (ticketForm) ticketForm.hidden = section !== 'ticket';
       if (moderationForm) moderationForm.hidden = section !== 'moderation';
       if (funForm) funForm.hidden = section !== 'fun';
+      if (communityForm) communityForm.hidden = section !== 'community';
       if (messagesForm) messagesForm.hidden = section !== 'messages';
-      if (section === 'verification' || section === 'globalchat' || section === 'messages' || section === 'ticket' || section === 'moderation' || section === 'fun') {
+      if (section === 'verification' || section === 'globalchat' || section === 'messages' || section === 'ticket' || section === 'moderation' || section === 'fun' || section === 'community') {
         if (soon) soon.hidden = true;
       } else if (soon) {
         soon.hidden = false;
@@ -1555,6 +1645,30 @@ async function initDashboardPage() {
 
 
 
+
+
+  communityForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!selectedGuildId) return dashboardNotify(null, 'Bitte wähle zuerst einen Server.', 'warn');
+    const formData = new FormData(communityForm);
+    const payload = {
+      enabled: true,
+      channelId: formData.get('communityTeamlistChannelId') || '',
+      roleIds: Array.from(communityRoleIds),
+    };
+    if (!payload.channelId) return dashboardNotify('community', 'Bitte wähle einen Teamlist-Kanal.', 'warn');
+    if (!payload.roleIds.length) return dashboardNotify('community', 'Bitte wähle mindestens eine Rolle für die Teamliste.', 'warn');
+    const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/community`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.ok) return dashboardNotify('community', result.error || 'Community konnte nicht gespeichert werden.', 'error');
+    communityDirty = false;
+    if (result.config) renderCommunityConfig({ community: result.config }, dashboardChannels);
+    dashboardNotify('community', 'Community gespeichert. Blue sendet/aktualisiert jetzt die Teamliste.', 'success');
+  });
 
   funForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
