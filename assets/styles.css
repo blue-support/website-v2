@@ -1883,3 +1883,21 @@ img,video,canvas{max-width:100%}
 .ticket-category-builder{position:relative;overflow:hidden}
 .ticket-category-builder::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:linear-gradient(180deg,var(--blue),var(--cyan));opacity:.75}
 .ticket-category-builder>*{position:relative}
+
+/* Dashboard Moderation Module */
+.moderation-layout-grid{align-items:start}
+.moderation-config-card{min-height:560px}
+.dashboard-moderation-role-list{display:grid;gap:16px;margin-top:18px}
+.moderation-role-row{border:1px solid rgba(148,163,184,.22);background:rgba(15,23,42,.58);border-radius:22px;padding:16px;box-shadow:0 16px 34px rgba(0,0,0,.18)}
+.moderation-role-top{display:grid;grid-template-columns:minmax(0,1fr) 42px;gap:12px;align-items:end;margin-bottom:14px}
+.command-chip-grid{display:flex;flex-wrap:wrap;gap:10px}
+.command-chip{border:1px solid rgba(148,163,184,.24);background:rgba(255,255,255,.055);color:#dbeafe;border-radius:999px;padding:9px 13px;font-weight:800;cursor:pointer;transition:.18s ease;box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+.command-chip:hover{transform:translateY(-1px);border-color:rgba(56,189,248,.65);background:rgba(56,189,248,.12)}
+.command-chip.active{color:#03131f;background:linear-gradient(135deg,#38bdf8,#22c55e);border-color:transparent;box-shadow:0 10px 28px rgba(56,189,248,.2)}
+.icon-button.danger{width:42px;height:42px;border-radius:14px;border:1px solid rgba(248,113,113,.3);background:rgba(248,113,113,.12);color:#fecaca;font-size:22px;font-weight:900;cursor:pointer}
+.icon-button.danger:hover{background:rgba(248,113,113,.22);color:#fff}
+.dashboard-moderation-preview-list{display:grid;gap:10px;margin-top:14px}
+.dashboard-moderation-preview-list>div{border:1px solid rgba(148,163,184,.16);background:rgba(2,6,23,.35);border-radius:16px;padding:12px 14px}
+.dashboard-moderation-preview-list strong{display:block;color:#fff;margin-bottom:4px}
+.dashboard-moderation-preview-list small{color:#93c5fd;line-height:1.5}
+@media(max-width:760px){.moderation-role-top{grid-template-columns:1fr}.icon-button.danger{width:100%}.command-chip{flex:1 1 calc(50% - 8px);text-align:center}.moderation-config-card{min-height:0}}

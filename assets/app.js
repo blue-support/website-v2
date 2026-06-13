@@ -720,6 +720,7 @@ async function initDashboardPage() {
   const globalchatForm = $('[data-dashboard-globalchat-form]');
   const messagesForm = $('[data-dashboard-messages-form]');
   const ticketForm = $('[data-dashboard-ticket-form]');
+  const moderationForm = $('[data-dashboard-moderation-form]');
   const soon = $('[data-dashboard-soon]');
   let selectedGuildId = null;
   let selectedGuildData = null;
@@ -734,6 +735,18 @@ async function initDashboardPage() {
   let dashboardServerAutoRefreshTimer = null;
   let globalchatDirty = false;
   let ticketDirty = false;
+  let moderationDirty = false;
+  let moderationRolePermissions = [];
+  const moderationCommands = [
+    { id: 'ban', label: 'Ban' },
+    { id: 'unban', label: 'Unban' },
+    { id: 'kick', label: 'Kick' },
+    { id: 'mute', label: 'Mute' },
+    { id: 'unmute', label: 'Unmute' },
+    { id: 'warn', label: 'Warn' },
+    { id: 'unwarn', label: 'Unwarn' },
+    { id: 'warnings', label: 'Warnings' },
+  ];
   let ticketCategories = [];
   let dashboardMessages = [];
   let selectedDashboardMessageId = null;
@@ -1020,6 +1033,125 @@ async function initDashboardPage() {
   }
 
 
+
+  function emptyModerationRole(index = 0) {
+    return { id: `mod_${index + 1}`, roleId: '', commands: [] };
+  }
+
+  function normalizeModerationPermissions(entries) {
+    const allowed = new Set(moderationCommands.map((command) => command.id));
+    const cleaned = [];
+    for (const entry of Array.isArray(entries) ? entries : []) {
+      const roleId = String(entry.roleId || entry.role_id || '').replace(/\D/g, '');
+      if (!roleId || cleaned.some((item) => item.roleId === roleId)) continue;
+      const commands = Array.from(new Set((entry.commands || []).map(String).filter((cmd) => allowed.has(cmd))));
+      if (!commands.length) continue;
+      cleaned.push({ id: `mod_${cleaned.length + 1}`, roleId, commands });
+      if (cleaned.length >= 5) break;
+    }
+    return cleaned.length ? cleaned : [emptyModerationRole(0)];
+  }
+
+  function commandLabel(commandId) {
+    return moderationCommands.find((command) => command.id === commandId)?.label || commandId;
+  }
+
+  function updateModerationPreview() {
+    if (!moderationForm) return;
+    const logSelect = $('[data-dashboard-moderation-log-channel]');
+    const logPreview = $('[data-dashboard-moderation-log-preview]');
+    const logOption = [...(logSelect?.options || [])].find((option) => option.value === logSelect?.value);
+    if (logPreview) logPreview.textContent = logOption && logOption.value ? `#${logOption.textContent}` : 'Kein Log-Kanal';
+    const preview = $('[data-dashboard-moderation-preview]');
+    if (preview) {
+      const rows = moderationRolePermissions
+        .filter((entry) => entry.roleId && (entry.commands || []).length)
+        .map((entry) => {
+          const role = dashboardRoles.find((item) => String(item.id) === String(entry.roleId));
+          const commands = (entry.commands || []).map(commandLabel).join(', ');
+          return `<div><strong>${role ? `@${escapeHtml(role.name)}` : `Rolle ${escapeHtml(entry.roleId)}`}</strong><small>${escapeHtml(commands || 'Keine Commands')}</small></div>`;
+        });
+      preview.innerHTML = rows.length ? rows.join('') : '<p class="muted compact">Noch keine Mod-Rollen eingerichtet.</p>';
+    }
+  }
+
+  function renderModerationRows() {
+    const list = $('[data-dashboard-moderation-role-list]');
+    if (!list) return;
+    moderationRolePermissions = moderationRolePermissions.slice(0, 5);
+    if (!moderationRolePermissions.length) moderationRolePermissions = [emptyModerationRole(0)];
+    const roleOptions = '<option value="">Rolle wählen</option>' + dashboardSelectOptions(dashboardRoles, []);
+    list.innerHTML = moderationRolePermissions.map((entry, index) => {
+      const commandChips = moderationCommands.map((command) => {
+        const active = (entry.commands || []).includes(command.id);
+        return `<button class="command-chip ${active ? 'active' : ''}" type="button" data-moderation-command="${escapeHtml(command.id)}" data-moderation-command-index="${index}">${escapeHtml(command.label)}</button>`;
+      }).join('');
+      return `
+        <article class="moderation-role-row">
+          <div class="moderation-role-top">
+            <label>Mod-Rolle ${index + 1}<select data-moderation-role-select="${index}">${roleOptions}</select></label>
+            <button class="icon-button danger" type="button" data-moderation-role-remove="${index}" aria-label="Mod-Rolle entfernen">×</button>
+          </div>
+          <div class="command-chip-grid">${commandChips}</div>
+        </article>
+      `;
+    }).join('');
+    $$('[data-moderation-role-select]', list).forEach((select) => {
+      const index = Number.parseInt(select.dataset.moderationRoleSelect, 10);
+      select.value = moderationRolePermissions[index]?.roleId || '';
+      select.addEventListener('change', () => {
+        const value = String(select.value || '');
+        const duplicate = value && moderationRolePermissions.some((entry, idx) => idx !== index && String(entry.roleId) === value);
+        if (duplicate) {
+          select.value = moderationRolePermissions[index]?.roleId || '';
+          return dashboardNotify('moderation', 'Diese Rolle wurde bereits hinzugefügt.', 'warn');
+        }
+        moderationRolePermissions[index].roleId = value;
+        moderationDirty = true;
+        updateModerationPreview();
+      });
+    });
+    $$('[data-moderation-command]', list).forEach((button) => {
+      button.addEventListener('click', () => {
+        const index = Number.parseInt(button.dataset.moderationCommandIndex, 10);
+        const command = String(button.dataset.moderationCommand || '');
+        const entry = moderationRolePermissions[index];
+        if (!entry) return;
+        entry.commands ||= [];
+        if (entry.commands.includes(command)) entry.commands = entry.commands.filter((item) => item !== command);
+        else entry.commands.push(command);
+        moderationDirty = true;
+        renderModerationRows();
+      });
+    });
+    $$('[data-moderation-role-remove]', list).forEach((button) => {
+      button.addEventListener('click', () => {
+        const index = Number.parseInt(button.dataset.moderationRoleRemove, 10);
+        moderationRolePermissions.splice(index, 1);
+        if (!moderationRolePermissions.length) moderationRolePermissions.push(emptyModerationRole(0));
+        moderationDirty = true;
+        renderModerationRows();
+      });
+    });
+    updateModerationPreview();
+  }
+
+  function renderModerationConfig(data, channels) {
+    if (!moderationForm) return;
+    const config = data.moderation || {};
+    const logSelect = $('[data-dashboard-moderation-log-channel]');
+    if (logSelect) logSelect.innerHTML = '<option value="">Kein Log-Kanal</option>' + dashboardSelectOptions(channels, [config.logChannelId || config.log_channel_id].filter(Boolean));
+    moderationRolePermissions = normalizeModerationPermissions(config.rolePermissions || config.role_permissions || []);
+    const status = $('[data-dashboard-moderation-status]');
+    if (status) {
+      const active = moderationRolePermissions.some((entry) => entry.roleId && (entry.commands || []).length);
+      status.textContent = active ? 'Eingerichtet' : 'Nicht eingerichtet';
+      status.className = `chip ${active ? 'online' : ''}`;
+    }
+    renderModerationRows();
+    moderationDirty = false;
+  }
+
   function emptyMessagePayload() {
     return {
       id: '',
@@ -1202,6 +1334,7 @@ async function initDashboardPage() {
     }
     renderGlobalchatConfig(data, globalchatChannels);
     renderTicketConfig(data, globalchatChannels, categoryChannels);
+    renderModerationConfig(data, globalchatChannels);
     renderMessagesConfig(data, globalchatChannels);
     if (data.verification?.mode) {
       const modeInput = form.querySelector(`[name="mode"][value="${data.verification.mode}"]`);
@@ -1310,6 +1443,8 @@ async function initDashboardPage() {
   globalchatForm?.addEventListener('change', () => { globalchatDirty = true; updateGlobalchatPreview(); });
   ticketForm?.addEventListener('input', () => { ticketDirty = true; updateTicketPreview(); });
   ticketForm?.addEventListener('change', () => { ticketDirty = true; updateTicketPreview(); });
+  moderationForm?.addEventListener('input', () => { moderationDirty = true; updateModerationPreview(); });
+  moderationForm?.addEventListener('change', () => { moderationDirty = true; updateModerationPreview(); });
   messagesForm?.addEventListener('input', () => { messagesDirty = true; updateMessagePreview(); });
   messagesForm?.addEventListener('change', () => { messagesDirty = true; updateMessagePreview(); });
   $('[data-dashboard-refresh]')?.addEventListener('click', async () => {
@@ -1323,8 +1458,9 @@ async function initDashboardPage() {
       if (form) form.hidden = section !== 'verification';
       if (globalchatForm) globalchatForm.hidden = section !== 'globalchat';
       if (ticketForm) ticketForm.hidden = section !== 'ticket';
+      if (moderationForm) moderationForm.hidden = section !== 'moderation';
       if (messagesForm) messagesForm.hidden = section !== 'messages';
-      if (section === 'verification' || section === 'globalchat' || section === 'messages' || section === 'ticket') {
+      if (section === 'verification' || section === 'globalchat' || section === 'messages' || section === 'ticket' || section === 'moderation') {
         if (soon) soon.hidden = true;
       } else if (soon) {
         soon.hidden = false;
@@ -1333,6 +1469,42 @@ async function initDashboardPage() {
     });
   });
 
+
+
+  $('[data-dashboard-moderation-add-role]')?.addEventListener('click', () => {
+    if (moderationRolePermissions.length >= 5) return dashboardNotify('moderation', 'Maximal 5 Mod-Rollen sind möglich.', 'warn');
+    moderationRolePermissions.push(emptyModerationRole(moderationRolePermissions.length));
+    moderationDirty = true;
+    renderModerationRows();
+  });
+
+  moderationForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!selectedGuildId) return dashboardNotify(null, 'Bitte wähle zuerst einen Server.', 'warn');
+    const formData = new FormData(moderationForm);
+    const rolePermissions = moderationRolePermissions
+      .map((entry) => ({
+        roleId: String(entry.roleId || '').replace(/\D/g, ''),
+        commands: Array.from(new Set((entry.commands || []).map(String)))
+      }))
+      .filter((entry) => entry.roleId && entry.commands.length)
+      .slice(0, 5);
+    if (!rolePermissions.length) return dashboardNotify('moderation', 'Bitte wähle mindestens eine Mod-Rolle und mindestens einen Command.', 'warn');
+    const payload = {
+      logChannelId: formData.get('moderationLogChannelId') || '',
+      rolePermissions
+    };
+    const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/moderation`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.ok) return dashboardNotify('moderation', result.error || 'Moderation konnte nicht gespeichert werden.', 'error');
+    moderationDirty = false;
+    if (result.config) renderModerationConfig({ moderation: result.config }, dashboardChannels);
+    dashboardNotify('moderation', 'Moderation gespeichert. Blue übernimmt jetzt Rollen, Commands und Log-Kanal.', 'success');
+  });
 
 
   $('[data-dashboard-ticket-add-category]')?.addEventListener('click', () => {
