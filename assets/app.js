@@ -721,6 +721,7 @@ async function initDashboardPage() {
   const messagesForm = $('[data-dashboard-messages-form]');
   const ticketForm = $('[data-dashboard-ticket-form]');
   const moderationForm = $('[data-dashboard-moderation-form]');
+  const securityForm = $('[data-dashboard-security-form]');
   const funForm = $('[data-dashboard-fun-form]');
   const communityForm = $('[data-dashboard-community-form]');
   const soon = $('[data-dashboard-soon]');
@@ -738,6 +739,9 @@ async function initDashboardPage() {
   let globalchatDirty = false;
   let ticketDirty = false;
   let moderationDirty = false;
+  let securityDirty = false;
+  let securityIgnoredRoleIds = new Set();
+  let securityIgnoredChannelIds = new Set();
   let funDirty = false;
   let communityDirty = false;
   let communityRoleIds = new Set();
@@ -1439,6 +1443,136 @@ async function initDashboardPage() {
     }
   }
 
+
+  function renderSecuritySelectedRoles() {
+    const container = $('[data-dashboard-security-selected-roles]');
+    const count = $('[data-dashboard-security-role-count]');
+    if (count) count.textContent = String(securityIgnoredRoleIds.size);
+    if (!container) return;
+    const selected = dashboardRoles.filter((role) => securityIgnoredRoleIds.has(String(role.id)));
+    if (!selected.length) {
+      container.innerHTML = '<span class="muted">Keine Rolle ignoriert</span>';
+      return;
+    }
+    container.innerHTML = selected.map((role) => `<button class="selected-role-tag" type="button" data-security-role-remove="${escapeHtml(role.id)}"${roleColorStyle(role)}><span>@${escapeHtml(role.name)}</span><b aria-hidden="true">×</b></button>`).join('');
+    $$('[data-security-role-remove]', container).forEach((button) => {
+      button.addEventListener('click', () => {
+        securityIgnoredRoleIds.delete(String(button.dataset.securityRoleRemove || ''));
+        securityDirty = true;
+        renderSecurityPickers();
+      });
+    });
+  }
+
+  function renderSecurityRolePicker() {
+    const container = $('[data-dashboard-security-role-picker]');
+    if (!container) return;
+    if (!dashboardRoles.length) {
+      container.innerHTML = '<p class="muted">Keine Rollen gefunden.</p>';
+      return;
+    }
+    container.innerHTML = dashboardRoles.map((role) => {
+      const active = securityIgnoredRoleIds.has(String(role.id));
+      return `<button class="role-chip ${active ? 'active' : ''}" type="button" data-security-role-chip="${escapeHtml(role.id)}"${roleColorStyle(role)}><span class="role-dot"></span>@${escapeHtml(role.name)}</button>`;
+    }).join('');
+    $$('[data-security-role-chip]', container).forEach((button) => {
+      button.addEventListener('click', () => {
+        const id = String(button.dataset.securityRoleChip || '');
+        if (!id) return;
+        if (securityIgnoredRoleIds.has(id)) securityIgnoredRoleIds.delete(id);
+        else securityIgnoredRoleIds.add(id);
+        securityDirty = true;
+        renderSecurityPickers();
+      });
+    });
+  }
+
+  function renderSecuritySelectedChannels() {
+    const container = $('[data-dashboard-security-selected-channels]');
+    const count = $('[data-dashboard-security-channel-count]');
+    if (count) count.textContent = String(securityIgnoredChannelIds.size);
+    if (!container) return;
+    const selected = dashboardChannels.filter((channel) => securityIgnoredChannelIds.has(String(channel.id)));
+    if (!selected.length) {
+      container.innerHTML = '<span class="muted">Kein Kanal ignoriert</span>';
+      return;
+    }
+    container.innerHTML = selected.map((channel) => `<button class="selected-role-tag channel-chip" type="button" data-security-channel-remove="${escapeHtml(channel.id)}"><span>#${escapeHtml(channel.name)}</span><b aria-hidden="true">×</b></button>`).join('');
+    $$('[data-security-channel-remove]', container).forEach((button) => {
+      button.addEventListener('click', () => {
+        securityIgnoredChannelIds.delete(String(button.dataset.securityChannelRemove || ''));
+        securityDirty = true;
+        renderSecurityPickers();
+      });
+    });
+  }
+
+  function renderSecurityChannelPicker() {
+    const container = $('[data-dashboard-security-channel-picker]');
+    if (!container) return;
+    if (!dashboardChannels.length) {
+      container.innerHTML = '<p class="muted">Keine Textkanäle gefunden.</p>';
+      return;
+    }
+    container.innerHTML = dashboardChannels.map((channel) => {
+      const active = securityIgnoredChannelIds.has(String(channel.id));
+      return `<button class="role-chip channel-chip ${active ? 'active' : ''}" type="button" data-security-channel-chip="${escapeHtml(channel.id)}"><span class="role-dot"></span>#${escapeHtml(channel.name)}</button>`;
+    }).join('');
+    $$('[data-security-channel-chip]', container).forEach((button) => {
+      button.addEventListener('click', () => {
+        const id = String(button.dataset.securityChannelChip || '');
+        if (!id) return;
+        if (securityIgnoredChannelIds.has(id)) securityIgnoredChannelIds.delete(id);
+        else securityIgnoredChannelIds.add(id);
+        securityDirty = true;
+        renderSecurityPickers();
+      });
+    });
+  }
+
+  function updateSecurityPreview() {
+    if (!securityForm) return;
+    const enabled = securityForm.querySelector('[name="securityLinksEnabled"]')?.checked;
+    const enabledPreview = $('[data-dashboard-security-enabled-preview]');
+    if (enabledPreview) enabledPreview.textContent = enabled ? 'Aktiv · https:// wird gelöscht' : 'Nicht aktiv';
+    const rolesPreview = $('[data-dashboard-security-roles-preview]');
+    const channelsPreview = $('[data-dashboard-security-channels-preview]');
+    if (rolesPreview) {
+      const names = dashboardRoles.filter((role) => securityIgnoredRoleIds.has(String(role.id))).map((role) => `@${role.name}`);
+      rolesPreview.textContent = names.length ? names.join(', ') : 'Keine';
+    }
+    if (channelsPreview) {
+      const names = dashboardChannels.filter((channel) => securityIgnoredChannelIds.has(String(channel.id))).map((channel) => `#${channel.name}`);
+      channelsPreview.textContent = names.length ? names.join(', ') : 'Keine';
+    }
+  }
+
+  function renderSecurityPickers() {
+    renderSecurityRolePicker();
+    renderSecuritySelectedRoles();
+    renderSecurityChannelPicker();
+    renderSecuritySelectedChannels();
+    updateSecurityPreview();
+  }
+
+  function renderSecurityConfig(data, channels) {
+    if (!securityForm) return;
+    const config = data.security || {};
+    const links = config.links || {};
+    const enabledInput = securityForm.querySelector('[name="securityLinksEnabled"]');
+    if (enabledInput) enabledInput.checked = Boolean(links.enabled);
+    securityIgnoredRoleIds = new Set((links.ignoredRoleIds || links.ignored_role_ids || []).map(String));
+    securityIgnoredChannelIds = new Set((links.ignoredChannelIds || links.ignored_channel_ids || []).map(String));
+    const status = $('[data-dashboard-security-status]');
+    if (status) {
+      const active = Boolean(links.enabled);
+      status.textContent = active ? 'Aktiv' : 'Nicht aktiv';
+      status.className = `chip ${active ? 'online' : ''}`;
+    }
+    securityDirty = false;
+    renderSecurityPickers();
+  }
+
   function renderFunConfig(data, channels = dashboardChannels) {
     if (!funForm) return;
     const usableChannels = (channels && channels.length ? channels : dashboardTextChannelsFromGuild());
@@ -1571,6 +1705,7 @@ async function initDashboardPage() {
     renderGlobalchatConfig(data, globalchatChannels);
     renderTicketConfig(data, globalchatChannels, categoryChannels);
     renderModerationConfig(data, globalchatChannels);
+    renderSecurityConfig(data, globalchatChannels);
     renderFunConfig(data, globalchatChannels);
     renderCommunityConfig(data, globalchatChannels);
     renderMessagesConfig(data, globalchatChannels);
@@ -1691,6 +1826,8 @@ async function initDashboardPage() {
   });
   moderationForm?.addEventListener('input', () => { moderationDirty = true; updateModerationPreview(); });
   moderationForm?.addEventListener('change', () => { moderationDirty = true; updateModerationPreview(); });
+  securityForm?.addEventListener('input', () => { securityDirty = true; updateSecurityPreview(); });
+  securityForm?.addEventListener('change', () => { securityDirty = true; updateSecurityPreview(); });
   funForm?.addEventListener('input', () => { funDirty = true; updateFunPreview(); });
   funForm?.addEventListener('change', () => { funDirty = true; updateFunPreview(); });
   communityForm?.addEventListener('input', () => { communityDirty = true; updateCommunityPreview(); });
@@ -1709,10 +1846,11 @@ async function initDashboardPage() {
       if (globalchatForm) globalchatForm.hidden = section !== 'globalchat';
       if (ticketForm) ticketForm.hidden = section !== 'ticket';
       if (moderationForm) moderationForm.hidden = section !== 'moderation';
+      if (securityForm) securityForm.hidden = section !== 'security';
       if (funForm) funForm.hidden = section !== 'fun';
       if (communityForm) communityForm.hidden = section !== 'community';
       if (messagesForm) messagesForm.hidden = section !== 'messages';
-      if (section === 'verification' || section === 'globalchat' || section === 'messages' || section === 'ticket' || section === 'moderation' || section === 'fun' || section === 'community') {
+      if (section === 'verification' || section === 'globalchat' || section === 'messages' || section === 'ticket' || section === 'moderation' || section === 'security' || section === 'fun' || section === 'community') {
         if (soon) soon.hidden = true;
       } else if (soon) {
         soon.hidden = false;
@@ -1746,6 +1884,30 @@ async function initDashboardPage() {
     communityDirty = false;
     if (result.config) renderCommunityConfig({ community: result.config }, dashboardChannels);
     dashboardNotify('community', 'Community gespeichert. Blue sendet/aktualisiert jetzt die Teamliste.', 'success');
+  });
+
+
+  securityForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!selectedGuildId) return dashboardNotify(null, 'Bitte wähle zuerst einen Server.', 'warn');
+    const formData = new FormData(securityForm);
+    const payload = {
+      links: {
+        enabled: formData.get('securityLinksEnabled') === 'on',
+        ignoredRoleIds: Array.from(securityIgnoredRoleIds),
+        ignoredChannelIds: Array.from(securityIgnoredChannelIds),
+      }
+    };
+    const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/security`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.ok) return dashboardNotify('security', result.error || 'Security konnte nicht gespeichert werden.', 'error');
+    securityDirty = false;
+    if (result.config) renderSecurityConfig({ security: result.config }, dashboardChannels);
+    dashboardNotify('security', payload.links.enabled ? 'Link-Schutz gespeichert. Blue löscht jetzt https:// Links, außer Ausnahmen greifen.' : 'Link-Schutz deaktiviert und gespeichert.', 'success');
   });
 
   funForm?.addEventListener('submit', async (event) => {

@@ -2016,3 +2016,26 @@ img,video,canvas{max-width:100%}
   .ticket-panel-embed-card { grid-column: auto; }
   .ticket-panel-message-preview .discord-embed-preview { max-width: 100%; }
 }
+
+
+/* Dashboard Security Links */
+.security-layout-grid {
+  align-items: stretch;
+}
+.security-config-card,
+.security-preview-card {
+  min-width: 0;
+}
+.security-picker-block {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid rgba(148, 163, 184, .18);
+  border-radius: 18px;
+  background: rgba(15, 23, 42, .42);
+}
+.security-preview-card .feature-preview-line span {
+  overflow-wrap: anywhere;
+}
+.channel-chip .role-dot {
+  background: linear-gradient(135deg, #38bdf8, #6366f1);
+}
