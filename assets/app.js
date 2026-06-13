@@ -805,6 +805,35 @@ async function initDashboardPage() {
     return ` style="--role-color:${escapeHtml(color)}"`;
   }
 
+
+  function dashboardIsTextChannel(channel) {
+    const type = String(channel?.type || '').toLowerCase();
+    return ['text', 'news', 'announcement', 'guild_text', 'guild_news', '0', '5'].includes(type);
+  }
+
+  function dashboardTextChannelsFromGuild(guild = selectedGuildData) {
+    return ((guild && Array.isArray(guild.channels)) ? guild.channels : [])
+      .filter(dashboardIsTextChannel)
+      .sort((a, b) => (a.position || 0) - (b.position || 0));
+  }
+
+  function dashboardChannelName(channelId, fallback = 'Nicht eingerichtet') {
+    const id = String(channelId || '');
+    if (!id) return fallback;
+    const found = dashboardChannels.find((channel) => String(channel.id) === id)
+      || dashboardTextChannelsFromGuild().find((channel) => String(channel.id) === id);
+    return found ? `#${found.name}` : `#${id}`;
+  }
+
+  function setDashboardSelectOptions(selector, channels, selected, placeholder = 'Kanal auswählen') {
+    const select = typeof selector === 'string' ? $(selector) : selector;
+    if (!select) return;
+    const usableChannels = (channels && channels.length ? channels : dashboardTextChannelsFromGuild());
+    const selectedValues = [selected].flat().filter(Boolean).map(String);
+    select.innerHTML = `<option value="">${escapeHtml(placeholder)}</option>` + dashboardSelectOptions(usableChannels, selectedValues);
+    if (selectedValues.length) select.value = selectedValues[0];
+  }
+
   function renderSelectedRoleTags(target, selectedSet) {
     const container = $(target);
     if (!container) return;
@@ -1313,15 +1342,64 @@ async function initDashboardPage() {
     if (footer) footer.textContent = embed.footer || 'Powered by Blue ⚡';
   }
 
+
+  function updateFunPreview() {
+    if (!funForm) return;
+    const formData = new FormData(funForm);
+    const countingEnabled = formData.get('countingEnabled') === 'on';
+    const errateEnabled = formData.get('errateEnabled') === 'on';
+    const anonymEnabled = formData.get('anonymEnabled') === 'on';
+    const countingText = countingEnabled ? dashboardChannelName(formData.get('countingChannelId'), 'Kanal auswählen') : 'Deaktiviert';
+    const errateText = errateEnabled ? dashboardChannelName(formData.get('errateChannelId'), 'Kanal auswählen') : 'Deaktiviert';
+    const anonymText = anonymEnabled ? dashboardChannelName(formData.get('anonymChannelId'), 'Kanal auswählen') : 'Deaktiviert';
+    const countingPreview = $('[data-dashboard-fun-counting-preview]');
+    const erratePreview = $('[data-dashboard-fun-errate-preview]');
+    const anonymPreview = $('[data-dashboard-fun-anonym-preview]');
+    if (countingPreview) countingPreview.textContent = countingText;
+    if (erratePreview) erratePreview.textContent = errateText;
+    if (anonymPreview) anonymPreview.textContent = anonymText;
+    const status = $('[data-dashboard-fun-status]');
+    if (status) {
+      const activeCount = [countingEnabled, errateEnabled, anonymEnabled].filter(Boolean).length;
+      status.textContent = activeCount ? `${activeCount} aktiv` : 'Nicht eingerichtet';
+      status.className = `chip ${activeCount ? 'ok' : ''}`;
+    }
+  }
+
+  function renderFunConfig(data, channels = dashboardChannels) {
+    if (!funForm) return;
+    const usableChannels = (channels && channels.length ? channels : dashboardTextChannelsFromGuild());
+    const config = data.fun || {};
+    const counting = config.counting || {};
+    const errate = config.errate || {};
+    const anonym = config.anonym || {};
+    setDashboardSelectOptions('[data-dashboard-fun-counting-channel]', usableChannels, counting.channelId || counting.channel_id, 'Kanal auswählen');
+    setDashboardSelectOptions('[data-dashboard-fun-errate-channel]', usableChannels, errate.channelId || errate.channel_id, 'Kanal auswählen');
+    setDashboardSelectOptions('[data-dashboard-fun-anonym-channel]', usableChannels, anonym.channelId || anonym.channel_id, 'Kanal auswählen');
+    setDashboardSelectOptions('[data-dashboard-fun-anonym-log-channel]', usableChannels, anonym.logChannelId || anonym.log_channel_id, 'Kein Log-Kanal');
+    const countingEnabled = funForm.querySelector('[name="countingEnabled"]');
+    const errateEnabled = funForm.querySelector('[name="errateEnabled"]');
+    const anonymEnabled = funForm.querySelector('[name="anonymEnabled"]');
+    if (countingEnabled) countingEnabled.checked = Boolean(counting.enabled);
+    if (errateEnabled) errateEnabled.checked = Boolean(errate.enabled);
+    if (anonymEnabled) anonymEnabled.checked = Boolean(anonym.enabled);
+    if (!usableChannels.length) {
+      dashboardNotify('fun', 'Keine Textkanäle gefunden. Prüfe, ob der Bot auf dem Server Kanäle sehen darf.', 'warn');
+    }
+    funDirty = false;
+    updateFunPreview();
+  }
+
   function renderGuildConfig(data) {
     selectedGuildData = data.guild;
     access = data.access || { checked: false, hasPremiumFooter: false };
     $('[data-dashboard-server-name]').textContent = selectedGuildData.name || 'Server';
     $('[data-dashboard-server-meta]').textContent = `${formatValue(selectedGuildData.memberCount)} Mitglieder · ${access.checked ? (access.canManage ? 'Administrator bestätigt' : 'Administrator benötigt') : 'Administrator wird geprüft'}`;
     const roles = (selectedGuildData.roles || []).filter((role) => !role.managed && !role.default).sort((a, b) => (b.position || 0) - (a.position || 0));
-    const channels = (selectedGuildData.channels || []).filter((channel) => ['text', 'news', 'forum'].includes(channel.type));
-    const globalchatChannels = channels.filter((channel) => ['text', 'news'].includes(channel.type));
-    const categoryChannels = (selectedGuildData.channels || []).filter((channel) => channel.type === 'category');
+    const allGuildChannels = Array.isArray(selectedGuildData.channels) ? selectedGuildData.channels : [];
+    const channels = allGuildChannels.filter((channel) => dashboardIsTextChannel(channel) || String(channel.type).toLowerCase() === 'forum');
+    const globalchatChannels = allGuildChannels.filter(dashboardIsTextChannel);
+    const categoryChannels = allGuildChannels.filter((channel) => String(channel.type).toLowerCase() === 'category');
     dashboardChannels = globalchatChannels;
     dashboardCategoryChannels = categoryChannels;
     dashboardRoles = roles;
