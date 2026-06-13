@@ -256,7 +256,7 @@
                 <div>
                   <span class="eyebrow">Security</span>
                   <h3>Link Schutz</h3>
-                  <p>Blockiere unerwünschte HTTPS-Links automatisch. Rollen und Kanäle können optional ignoriert werden.</p>
+                  <p>Blockiere unerwünschte Links und Discord-Invites automatisch. Rollen und Kanäle können optional ignoriert werden.</p>
                 </div>
                 <span class="chip" data-dashboard-security-status>Nicht eingerichtet</span>
               </div>
@@ -266,9 +266,9 @@
               <div class="feature-setup-grid security-layout-grid">
                 <section class="verify-config-card feature-primary-card security-config-card">
                   <span class="eyebrow">Links</span>
-                  <h3>https:// Blocker</h3>
-                  <label class="switch-line premium-glow-soft"><input type="checkbox" name="securityLinksEnabled"><span>Links mit <strong>https://</strong> blockieren und löschen</span></label>
-                  <p class="muted compact">Wenn aktiv, löscht Blue Nachrichten mit HTTPS-Links automatisch, außer Rolle oder Kanal ist unten ignoriert.</p>
+                  <h3>HTTPS & Discord-Invite Blocker</h3>
+                  <label class="switch-line premium-glow-soft"><input type="checkbox" name="securityLinksEnabled"><span>HTTPS-Links und Discord-Invites blockieren und löschen</span></label>
+                  <p class="muted compact">Wenn aktiv, löscht Blue Nachrichten mit HTTPS-Links sowie Discord-Invites wie discord.gg/, discord.com/invite oder .gg/ automatisch, außer Rolle oder Kanal ist unten ignoriert.</p>
 
                   <div class="security-picker-block">
                     <div class="role-picker-title">
@@ -278,7 +278,7 @@
                       </div>
                       <span class="mini-counter" data-dashboard-security-role-count>0</span>
                     </div>
-                    <p class="muted compact">Optional: Diese Rollen dürfen weiterhin HTTPS-Links senden.</p>
+                    <p class="muted compact">Optional: Diese Rollen dürfen weiterhin Links und Discord-Invites senden.</p>
                     <div class="role-chip-grid" data-dashboard-security-role-picker></div>
                     <div class="selected-role-box" data-dashboard-security-selected-roles><span class="muted">Keine Rolle ignoriert</span></div>
                   </div>
@@ -291,7 +291,7 @@
                       </div>
                       <span class="mini-counter" data-dashboard-security-channel-count>0</span>
                     </div>
-                    <p class="muted compact">Optional: In diesen Kanälen sind HTTPS-Links weiterhin erlaubt.</p>
+                    <p class="muted compact">Optional: In diesen Kanälen sind Links und Discord-Invites weiterhin erlaubt.</p>
                     <div class="role-chip-grid" data-dashboard-security-channel-picker></div>
                     <div class="selected-role-box" data-dashboard-security-selected-channels><span class="muted">Kein Kanal ignoriert</span></div>
                   </div>

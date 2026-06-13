@@ -33,7 +33,9 @@ const DISCORD_OAUTH_MIN_RETRY_SECONDS = Number(process.env.DISCORD_OAUTH_MIN_RET
 // Keine lange gespeicherte Sperre mehr, damit Logout -> späterer Login nicht fälschlich 30-60 Minuten blockiert.
 const DISCORD_OAUTH_FALLBACK_RETRY_SECONDS = Number(process.env.DISCORD_OAUTH_FALLBACK_RETRY_SECONDS || 60);
 const DISCORD_OAUTH_MAX_LOCAL_BLOCK_SECONDS = Number(process.env.DISCORD_OAUTH_MAX_LOCAL_BLOCK_SECONDS || 10);
-const DISCORD_RELOGIN_CACHE_MS = Number(process.env.DISCORD_RELOGIN_CACHE_MS || (1000 * 60 * 60 * 24 * 7));
+// Release-sicher: erfolgreiche Discord-Logins werden länger erinnert.
+// Dadurch müssen viele Member beim Release nicht bei jedem Reload/Logout wieder durch Discord OAuth.
+const DISCORD_RELOGIN_CACHE_MS = Number(process.env.DISCORD_RELOGIN_CACHE_MS || (1000 * 60 * 60 * 24 * 30));
 const UNBAN_API_SECRET = process.env.UNBAN_API_SECRET || HEARTBEAT_SECRET || '';
 const UNBAN_APPLICATIONS_FILE = path.join(DATA_DIR, 'unban-applications.json');
 const UNBAN_BAN_CACHE_FILE = path.join(DATA_DIR, 'unban-ban-cache.json');
@@ -497,6 +499,14 @@ app.get('/auth/discord', (req, res) => {
   }
 
   const now = Date.now();
+  const sessionOAuthBlockedUntil = Number(req.session.oauthBlockedUntil || 0);
+  if (sessionOAuthBlockedUntil && now < sessionOAuthBlockedUntil) {
+    if (!forceFreshOAuth && restoreRememberLogin(req)) return res.redirect(returnTo);
+    const waitSeconds = Math.max(1, Math.ceil((sessionOAuthBlockedUntil - now) / 1000));
+    const waitText = waitSeconds >= 60 ? `${Math.ceil(waitSeconds / 60)} Minute(n)` : `${waitSeconds} Sekunde(n)`;
+    return res.status(429).send(`Discord OAuth ist für diese Browser-Session kurz geschützt. Bitte warte ca. ${waitText} und versuche es danach erneut.`);
+  }
+
   const lastStart = Number(req.session.oauthStartedAt || 0);
   if (lastStart && now - lastStart < DISCORD_OAUTH_MIN_RETRY_SECONDS * 1000) {
     return res.status(429).send('Discord Login wurde gerade erst gestartet. Bitte klicke nicht mehrfach auf Login.');
@@ -543,8 +553,13 @@ app.get('/auth/discord/callback', async (req, res) => {
     // State direkt verbrauchen, damit derselbe Callback nicht mehrfach Token-Anfragen sendet.
     delete req.session.oauthState;
 
-    if (Date.now() < discordOAuthBlockedUntil) {
-      return res.status(429).send(discordOAuthRateLimitMessage());
+    const sessionOAuthBlockedUntil = Number(req.session.oauthBlockedUntil || 0);
+    if (sessionOAuthBlockedUntil && Date.now() < sessionOAuthBlockedUntil) {
+      // Nur diese Browser-Session wird kurz geschützt, niemals alle Website-User global.
+      if (restoreRememberLogin(req)) return res.redirect(returnTo);
+      const waitSeconds = Math.max(1, Math.ceil((sessionOAuthBlockedUntil - Date.now()) / 1000));
+      const waitText = waitSeconds >= 60 ? `${Math.ceil(waitSeconds / 60)} Minute(n)` : `${waitSeconds} Sekunde(n)`;
+      return res.status(429).send(`Discord OAuth ist für diese Browser-Session kurz geschützt. Bitte warte ca. ${waitText} und versuche es dann erneut.`);
     }
 
     const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
@@ -581,11 +596,14 @@ app.get('/auth/discord/callback', async (req, res) => {
           return res.redirect(returnTo);
         }
 
-        discordOAuthBlockedUntil = Date.now() + Math.min(Math.max(retryAfter || 5, 5), 10) * 1000;
+        // Release-sicher: Kein globaler Block für alle Website-Besucher.
+        // Nur die aktuelle Browser-Session wird geschützt, damit ein User Discord nicht weiter spammt.
+        const sessionRetry = Math.min(Math.max(retryAfter || 60, 10), 60 * 60);
+        req.session.oauthBlockedUntil = Date.now() + sessionRetry * 1000;
         const retryText = retryAfter ? ` Discord retry_after: ${Math.ceil(retryAfter)} Sekunde(n).` : '';
         return res.status(429).send(
-          'Discord OAuth ist gerade temporär limitiert.' + retryText +
-          ' Die Website speichert ab dem nächsten erfolgreichen Login eine sichere Remember-Session, damit normaler Logout/Login danach ohne neue Discord-OAuth-Anfrage funktioniert.'
+          'Discord OAuth ist für diese Browser-Session gerade temporär limitiert.' + retryText +
+          ' Andere User werden dadurch nicht lokal blockiert. Bitte nicht mehrfach klicken und später erneut versuchen.'
         );
       }
 
@@ -597,6 +615,7 @@ app.get('/auth/discord/callback', async (req, res) => {
 
     // Erfolgreicher Token-Tausch = kein lokaler OAuth-Block mehr nötig.
     discordOAuthBlockedUntil = 0;
+    delete req.session.oauthBlockedUntil;
     saveDiscordOAuthBlockedUntil(0);
 
     const token = await tokenResponse.json();
@@ -667,6 +686,7 @@ app.post('/auth/logout', (req, res) => {
   delete req.session.oauthState;
   delete req.session.discordRedirectUri;
   delete req.session.oauthStartedAt;
+  delete req.session.oauthBlockedUntil;
   req.session.loggedOutAt = Date.now();
   return res.json({ ok: true, softLogout: true });
 });
