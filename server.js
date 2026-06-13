@@ -971,6 +971,7 @@ function dashboardPublicTicketConfig(config) {
       roleIds: Array.isArray(category.roleIds || category.role_ids) ? (category.roleIds || category.role_ids).map(String) : [],
     })).filter((category) => category.name) : [],
     panelMessageId: config.panelMessageId ? String(config.panelMessageId) : null,
+    panelEmbed: config.panelEmbed || config.panel_embed || null,
     status: config.status || 'saved',
     lastResult: config.lastResult || null,
     updatedAt: config.updatedAt || null,
@@ -1356,6 +1357,16 @@ app.post('/api/dashboard/guild/:guildId/ticket', requireUser, (req, res) => {
   if (!categories.length) return res.status(400).json({ ok: false, error: 'Bitte erstelle mindestens eine Ticket-Kategorie.' });
   if (categories.some((category) => !category.roleIds.length)) return res.status(400).json({ ok: false, error: 'Jede Ticket-Kategorie braucht mindestens eine Team-Rolle.' });
 
+  const rawPanelEmbed = body.panelEmbed && typeof body.panelEmbed === 'object' ? body.panelEmbed : null;
+  const canEditTicketFooter = Boolean(access.hasPremiumFooter);
+  const panelEmbed = rawPanelEmbed ? {
+    author: dashboardSanitizeText(rawPanelEmbed.author, 256),
+    authorImage: dashboardSanitizeText(rawPanelEmbed.authorImage || rawPanelEmbed.author_image, 400),
+    title: dashboardSanitizeText(rawPanelEmbed.title, 256),
+    description: dashboardSanitizeText(rawPanelEmbed.description, 1800),
+    footer: canEditTicketFooter ? (dashboardSanitizeText(rawPanelEmbed.footer, 120) || 'Powered by Blue ⚡') : 'Powered by Blue ⚡'
+  } : null;
+
   const configs = loadDashboardTicketConfigs();
   const oldConfig = configs.configs[guildId] || {};
   const now = new Date().toISOString();
@@ -1366,6 +1377,7 @@ app.post('/api/dashboard/guild/:guildId/ticket', requireUser, (req, res) => {
     ticketCategoryId,
     logChannelId,
     categories,
+    panelEmbed,
     updatedBy: req.session.discordUser,
     updatedAt: now,
     status: 'pending_apply'

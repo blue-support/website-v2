@@ -372,6 +372,24 @@
                   <label>Ticket Log-Kanal<select name="ticketLogChannelId" data-dashboard-ticket-log-channel required></select><small>Logs für neue Tickets, Claims, Freigaben und Schließungen.</small></label>
                 </section>
 
+                <section class="verify-config-card ticket-panel-embed-card">
+                  <div class="role-picker-title">
+                    <div>
+                      <span class="eyebrow">Panel Embed</span>
+                      <h3>Ticket Panel Design</h3>
+                    </div>
+                    <button class="btn ghost" type="button" data-dashboard-ticket-panel-reset>Standard wiederherstellen</button>
+                  </div>
+                  <p class="muted compact">Bearbeite das öffentliche Ticket-Panel. Mit Zurücksetzen nutzt Blue wieder das Standard-Embed.</p>
+                  <div class="form-row">
+                    <label>Panel Author<input name="ticketPanelAuthor" maxlength="256" placeholder="Blue Support"></label>
+                    <label>Author Image URL<input name="ticketPanelAuthorImage" placeholder="https://..."></label>
+                  </div>
+                  <label>Titel<input name="ticketPanelTitle" maxlength="256" placeholder="🎫 Blue Support Center"></label>
+                  <label>Beschreibung<textarea name="ticketPanelDescription" maxlength="1800" rows="5" placeholder="Beschreibe, wie User ein Ticket öffnen können..."></textarea></label>
+                  <label>Footer<input name="ticketPanelFooter" maxlength="120" value="Powered by Blue ⚡" data-dashboard-ticket-footer-input><small data-dashboard-ticket-footer-note>Ohne Blue Premium auf dem Mainserver bleibt der Footer fest auf Powered by Blue ⚡.</small></label>
+                </section>
+
                 <section class="verify-config-card ticket-categories-card">
                   <div class="role-picker-title">
                     <div>
@@ -384,15 +402,28 @@
                   <div class="ticket-category-list" data-dashboard-ticket-category-list></div>
                 </section>
 
-                <aside class="verify-preview-card feature-preview-card ticket-preview-card">
-                  <span class="eyebrow">Vorschau</span>
-                  <h3>🎫 Blue Support Center</h3>
-                  <p>Das Panel nutzt weiterhin dein bestehendes Ticket-System mit Auswahlmenü, Ticket-Kanal, Claim/Freigeben und Schließen.</p>
+                <aside class="discord-embed-preview-card ticket-discord-preview-card ticket-preview-card">
+                  <span class="eyebrow">Discord Preview</span>
+                  <div class="discord-message-preview ticket-panel-message-preview">
+                    <div class="discord-avatar">⚡</div>
+                    <div class="discord-message-body">
+                      <div class="discord-message-author">Blue <span>BOT</span></div>
+                      <div class="discord-embed-preview" data-ticket-panel-preview-card>
+                        <div class="discord-embed-author" data-ticket-panel-preview-author hidden></div>
+                        <div class="discord-embed-title" data-ticket-panel-preview-title>🎫 Blue Support Center</div>
+                        <div class="discord-embed-description" data-ticket-panel-preview-description>Willkommen im offiziellen Support-Bereich.</div>
+                        <div class="dashboard-ticket-preview-categories discord-ticket-categories-preview" data-dashboard-ticket-preview-categories></div>
+                        <div class="discord-embed-footer" data-ticket-panel-preview-footer>Powered by Blue ⚡</div>
+                      </div>
+                      <div class="discord-action-row-preview ticket-select-preview">
+                        <button type="button" disabled>Ticket-Kategorie auswählen</button>
+                      </div>
+                    </div>
+                  </div>
                   <div class="feature-preview-line"><strong>Panel:</strong> <span data-dashboard-ticket-panel-preview>Kanal auswählen</span></div>
                   <div class="feature-preview-line"><strong>Neue Tickets:</strong> <span data-dashboard-ticket-category-preview>Kategorie auswählen</span></div>
                   <div class="feature-preview-line"><strong>Logs:</strong> <span data-dashboard-ticket-log-preview>Kanal auswählen</span></div>
-                  <div class="dashboard-ticket-preview-categories" data-dashboard-ticket-preview-categories></div>
-                  <small>Powered by Blue ⚡</small>
+                  <small>Die Vorschau ist an Discord angelehnt. Auswahlmenü und Kategorien bleiben wie im Bot-System.</small>
                 </aside>
               </div>
 
