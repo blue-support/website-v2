@@ -284,7 +284,21 @@ async function initGlobalAuth() {
   authSlots.forEach((slot) => {
     const returnPath = slot.dataset.authReturn || (window.location.pathname || '/index.html');
     if (!auth.loggedIn || !auth.user) {
-      slot.innerHTML = `<a class="nav-login" href="/auth/discord?return=${encodeURIComponent(returnPath)}">Discord Login</a>`;
+      const loginLabel = auth.hasCachedLogin ? 'Discord Login' : 'Discord Login';
+      slot.innerHTML = `<a class="nav-login" data-discord-login-link href="/auth/discord?return=${encodeURIComponent(returnPath)}">${loginLabel}</a>`;
+      const loginLink = $('[data-discord-login-link]', slot);
+      loginLink?.addEventListener('click', (event) => {
+        const now = Date.now();
+        const lastClick = Number(sessionStorage.getItem('blue.oauth.lastClick') || 0);
+        if (lastClick && now - lastClick < 5000) {
+          event.preventDefault();
+          return;
+        }
+        sessionStorage.setItem('blue.oauth.lastClick', String(now));
+        loginLink.classList.add('is-loading');
+        loginLink.textContent = 'Login startet...';
+        loginLink.setAttribute('aria-disabled', 'true');
+      });
       return;
     }
 
@@ -1694,7 +1708,7 @@ async function initDashboardPage() {
     const languageEnabled = securityForm.querySelector('[name="securityLanguageEnabled"]')?.checked;
     const lang = securityForm.querySelector('[name="securityPreferredLanguage"]')?.value || 'de';
     const enabledPreview = $('[data-dashboard-security-enabled-preview]');
-    if (enabledPreview) enabledPreview.textContent = linksEnabled ? 'Aktiv · https:// wird gelöscht' : 'Nicht aktiv';
+    if (enabledPreview) enabledPreview.textContent = linksEnabled ? 'Aktiv · HTTPS & Discord-Invites werden gelöscht' : 'Nicht aktiv';
     const rolesPreview = $('[data-dashboard-security-roles-preview]');
     const channelsPreview = $('[data-dashboard-security-channels-preview]');
     if (rolesPreview) {

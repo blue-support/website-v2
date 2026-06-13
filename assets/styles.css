@@ -2144,3 +2144,10 @@ img,video,canvas{max-width:100%}
     grid-column: 1 / -1;
   }
 }
+
+
+.nav-login.is-loading{
+  pointer-events:none;
+  opacity:.72;
+  filter:saturate(.8);
+}
