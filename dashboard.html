@@ -23,7 +23,6 @@
       <a href="index.html#features">Features</a>
       <a href="status.html">Bot Status</a>
       <a class="active" href="dashboard.html">Dashboard</a>
-      <a class="nav-memorial" href="memorial.html">🕊 Kuba</a>
       <a href="ticket.html">Ticket Support</a>
       <a href="unban.html">Unban Antrag</a>
       <a href="tos.html">TOS</a>
@@ -344,6 +343,33 @@
                   </div>
                 </section>
 
+                <section class="verify-config-card feature-primary-card security-config-card security-unban-card">
+                  <span class="eyebrow">Unban System</span>
+                  <h3>Website Unban-Anträge</h3>
+                  <label class="switch-line premium-glow-soft"><input type="checkbox" name="securityUnbanEnabled"><span>Unban-System für diesen Server aktivieren</span></label>
+                  <p class="muted compact">Wenn aktiv, erscheint dieser Server auf der Unban-Seite. Anträge werden in den ausgewählten Log-Kanal gesendet und können dort per Button angenommen oder abgelehnt werden.</p>
+
+                  <label>Unban Log-Kanal
+                    <select name="securityUnbanLogChannelId" data-dashboard-security-unban-log-channel>
+                      <option value="">Log-Kanal auswählen</option>
+                    </select>
+                    <small>In diesen Kanal sendet Blue neue Unban-Anträge für diesen Server.</small>
+                  </label>
+
+                  <div class="security-picker-block">
+                    <div class="role-picker-title">
+                      <div>
+                        <span class="eyebrow">Team Rollen</span>
+                        <h3>Unban-Team</h3>
+                      </div>
+                      <span class="mini-counter" data-dashboard-security-unban-role-count>0/5</span>
+                    </div>
+                    <p class="muted compact">Bis zu 5 Rollen. Diese Rollen dürfen Unban-Anträge annehmen oder ablehnen. Administratoren dürfen es weiterhin.</p>
+                    <div class="role-chip-grid" data-dashboard-security-unban-role-picker></div>
+                    <div class="selected-role-box" data-dashboard-security-unban-selected-roles><span class="muted">Keine Team-Rolle ausgewählt</span></div>
+                  </div>
+                </section>
+
                 <aside class="verify-preview-card feature-preview-card security-preview-card">
                   <span class="eyebrow">Vorschau</span>
                   <h3>🔒 Security</h3>
@@ -356,6 +382,10 @@
                   <div class="feature-preview-line"><strong>Bevorzugt:</strong> <span data-dashboard-security-language-preview>Deutsch</span></div>
                   <div class="feature-preview-line"><strong>Sprach-Rollen:</strong> <span data-dashboard-security-language-roles-preview>Keine</span></div>
                   <div class="feature-preview-line"><strong>Sprach-Kanäle:</strong> <span data-dashboard-security-language-channels-preview>Keine</span></div>
+                  <hr class="soft-divider">
+                  <div class="feature-preview-line"><strong>Unban:</strong> <span data-dashboard-security-unban-enabled-preview>Nicht aktiv</span></div>
+                  <div class="feature-preview-line"><strong>Unban-Log:</strong> <span data-dashboard-security-unban-log-preview>Kein Log-Kanal</span></div>
+                  <div class="feature-preview-line"><strong>Unban-Team:</strong> <span data-dashboard-security-unban-roles-preview>Admins/Owner</span></div>
                   <small>Powered by Blue ⚡</small>
                 </aside>
               </div>
@@ -654,7 +684,7 @@
   <footer class="site-footer">
     <div class="wrapper footer-grid">
       <div><a class="brand" href="index.html"><span class="brand-mark">⚡</span><span class="brand-text">Blue</span></a><p>Der All-in-One Discord Bot für Community Server.</p></div>
-      <div class="footer-links"><strong>Website</strong><a href="index.html">Home</a><a href="status.html">Bot Status</a><a href="dashboard.html">Dashboard</a><a href="memorial.html">Kuba Andenken</a><a href="ticket.html">Ticket Support</a><a href="unban.html">Unban Antrag</a><a href="support.html">Support</a></div>
+      <div class="footer-links"><strong>Website</strong><a href="index.html">Home</a><a href="status.html">Bot Status</a><a href="dashboard.html">Dashboard</a><a href="ticket.html">Ticket Support</a><a href="unban.html">Unban Antrag</a><a href="support.html">Support</a></div>
       <div class="footer-links"><strong>Legal</strong><a href="impressum.html">Impressum</a><a href="tos.html">Terms of Service</a><a href="privacy.html">Privacy</a></div>
       <div class="footer-links"><strong>Action</strong><a href="https://discord.com/oauth2/authorize?client_id=1321889022380871681&permissions=8&integration_type=0&scope=bot" target="_blank" rel="noopener">Bot Einladen</a><a href="https://dsc.blue-lol.de" target="_blank" rel="noopener">Discord öffnen</a></div>
     </div>

@@ -909,6 +909,7 @@ function dashboardPublicSecurityConfig(config) {
   if (!config || typeof config !== 'object') return null;
   const links = config.links || {};
   const language = config.language || config.languages || {};
+  const unban = config.unban || config.unbanSystem || {};
   return {
     guildId: String(config.guildId || ''),
     links: {
@@ -922,10 +923,76 @@ function dashboardPublicSecurityConfig(config) {
       ignoredRoleIds: Array.isArray(language.ignoredRoleIds || language.ignored_role_ids) ? (language.ignoredRoleIds || language.ignored_role_ids).map((id) => String(id || '').replace(/\D/g, '')).filter(Boolean) : [],
       ignoredChannelIds: Array.isArray(language.ignoredChannelIds || language.ignored_channel_ids) ? (language.ignoredChannelIds || language.ignored_channel_ids).map((id) => String(id || '').replace(/\D/g, '')).filter(Boolean) : [],
     },
+    unban: {
+      enabled: Boolean(unban.enabled),
+      logChannelId: String(unban.logChannelId || unban.log_channel_id || '').replace(/\D/g, ''),
+      teamRoleIds: Array.isArray(unban.teamRoleIds || unban.team_role_ids) ? (unban.teamRoleIds || unban.team_role_ids).map((id) => String(id || '').replace(/\D/g, '')).filter(Boolean).slice(0, 5) : [],
+    },
     status: config.status || 'saved',
     lastResult: config.lastResult || null,
     updatedAt: config.updatedAt || null,
   };
+}
+
+function publicUnbanSystems() {
+  const guilds = loadDashboardGuilds().guilds || {};
+  const securityConfigs = loadDashboardSecurityConfigs().configs || {};
+  const systems = [
+    {
+      id: 'global',
+      type: 'global',
+      label: 'Blue Security Global Unban',
+      description: 'Für einen Ban aus dem Blue Security Global-Ban-System.',
+      always: true,
+      banKey: 'global'
+    },
+    {
+      id: 'globalchat',
+      type: 'globalchat',
+      label: 'Globalchat Unban',
+      description: 'Für einen Ban aus dem normalen Blue Globalchat.',
+      always: true,
+      banKey: 'globalchat'
+    }
+  ];
+
+  for (const [guildId, configRaw] of Object.entries(securityConfigs)) {
+    const guildIdClean = String(guildId || '').replace(/\D/g, '');
+    if (!guildIdClean || !configRaw || typeof configRaw !== 'object') continue;
+    const config = dashboardPublicSecurityConfig(configRaw);
+    if (!config?.unban?.enabled || !config.unban.logChannelId) continue;
+    const guild = guilds[guildIdClean] || {};
+    systems.push({
+      id: `discord:${guildIdClean}`,
+      type: 'discord',
+      guildId: guildIdClean,
+      label: `${guild.name || 'Discord Server'} Unban`,
+      serverName: guild.name || 'Discord Server',
+      description: `Für einen Ban auf ${guild.name || 'diesem Server'}.`,
+      banKey: `discord:${guildIdClean}`
+    });
+  }
+
+  return systems;
+}
+
+function findPublicUnbanSystem(type, guildId) {
+  const typeClean = String(type || '').toLowerCase();
+  if (typeClean === 'global' || typeClean === 'globalchat') return publicUnbanSystems().find((system) => system.type === typeClean) || null;
+  if (typeClean !== 'discord') return null;
+  const guildIdClean = String(guildId || '').replace(/\D/g, '');
+  if (!guildIdClean) return null;
+  return publicUnbanSystems().find((system) => system.type === 'discord' && String(system.guildId) === guildIdClean) || null;
+}
+
+function pendingKey(type, guildId) {
+  return type === 'discord' && guildId ? `discord:${guildId}` : String(type || 'discord');
+}
+
+function applicationMatchesSystem(app, userId, type, guildId = null) {
+  if (app.user?.id !== userId || !['pending', 'in_review'].includes(app.status) || app.type !== type) return false;
+  if (type === 'discord') return String(app.guildId || '') === String(guildId || '');
+  return true;
 }
 
 function loadDashboardFunConfigs() {
@@ -1241,12 +1308,18 @@ app.post('/api/dashboard/guild/:guildId/security', requireUser, (req, res) => {
   const botGuild = common.botGuild;
   const availableRoleIds = new Set((botGuild.roles || []).filter((role) => !role.default && !role.managed).map((role) => String(role.id)));
   const availableChannelIds = new Set((botGuild.channels || []).filter((channel) => ['text', 'news', 'forum'].includes(String(channel.type).toLowerCase())).map((channel) => String(channel.id)));
+  const availableTextChannelIds = new Set((botGuild.channels || []).filter((channel) => ['text', 'news'].includes(String(channel.type).toLowerCase())).map((channel) => String(channel.id)));
   const links = req.body?.links || {};
   const language = req.body?.language || {};
+  const unban = req.body?.unban || {};
   const ignoredRoleIds = Array.isArray(links.ignoredRoleIds) ? links.ignoredRoleIds.map((id) => String(id || '').replace(/\D/g, '')).filter((id) => id && availableRoleIds.has(id)) : [];
   const ignoredChannelIds = Array.isArray(links.ignoredChannelIds) ? links.ignoredChannelIds.map((id) => String(id || '').replace(/\D/g, '')).filter((id) => id && availableChannelIds.has(id)) : [];
   const languageIgnoredRoleIds = Array.isArray(language.ignoredRoleIds) ? language.ignoredRoleIds.map((id) => String(id || '').replace(/\D/g, '')).filter((id) => id && availableRoleIds.has(id)) : [];
   const languageIgnoredChannelIds = Array.isArray(language.ignoredChannelIds) ? language.ignoredChannelIds.map((id) => String(id || '').replace(/\D/g, '')).filter((id) => id && availableChannelIds.has(id)) : [];
+  const unbanEnabled = Boolean(unban.enabled);
+  const unbanLogChannelId = String(unban.logChannelId || '').replace(/\D/g, '');
+  if (unbanEnabled && !availableTextChannelIds.has(unbanLogChannelId)) return res.status(400).json({ ok: false, error: 'Bitte wähle einen gültigen Textkanal für das Unban-System.' });
+  const unbanTeamRoleIds = Array.isArray(unban.teamRoleIds) ? unban.teamRoleIds.map((id) => String(id || '').replace(/\D/g, '')).filter((id) => id && availableRoleIds.has(id)).slice(0, 5) : [];
   const config = {
     guildId,
     links: {
@@ -1259,6 +1332,11 @@ app.post('/api/dashboard/guild/:guildId/security', requireUser, (req, res) => {
       preferred: normalizeDashboardSecurityLanguage(language.preferred),
       ignoredRoleIds: Array.from(new Set(languageIgnoredRoleIds)),
       ignoredChannelIds: Array.from(new Set(languageIgnoredChannelIds)),
+    },
+    unban: {
+      enabled: unbanEnabled,
+      logChannelId: unbanEnabled ? unbanLogChannelId : '',
+      teamRoleIds: Array.from(new Set(unbanTeamRoleIds)).slice(0, 5),
     },
     updatedBy: { id: req.session.discordUser.id, username: req.session.discordUser.username },
     updatedAt: new Date().toISOString(),
@@ -2284,8 +2362,8 @@ function saveLookupRequests(data) {
   saveJson(UNBAN_LOOKUP_FILE, data);
 }
 
-function getPendingForUser(applications, userId, type) {
-  return applications.find((app) => app.user?.id === userId && app.type === type && ['pending', 'in_review'].includes(app.status));
+function getPendingForUser(applications, userId, type, guildId = null) {
+  return applications.find((app) => applicationMatchesSystem(app, userId, type, guildId));
 }
 
 function sanitizeText(value, maxLength) {
@@ -2296,10 +2374,15 @@ function userBanCache(userId) {
   const cache = loadBanCache();
   return cache.users[String(userId)] || {
     discord: { checked: false, banned: false, reason: 'Noch nicht vom Bot geprüft.', duration: 'Unbekannt', until: null },
+    discordServers: {},
     global: { checked: false, banned: false, reason: 'Noch nicht vom Bot geprüft.', duration: 'Unbekannt', until: null },
     globalchat: { checked: false, banned: false, reason: 'Noch nicht vom Bot geprüft.', duration: 'Unbekannt', until: null }
   };
 }
+
+app.get('/api/unban/systems', (_req, res) => {
+  res.json({ ok: true, systems: publicUnbanSystems() });
+});
 
 app.post('/api/unban/request-lookup', requireUser, (req, res) => {
   const data = loadLookupRequests();
@@ -2312,22 +2395,34 @@ app.post('/api/unban/request-lookup', requireUser, (req, res) => {
 app.get('/api/unban/me', requireUser, (req, res) => {
   const user = req.session.discordUser;
   const applications = loadApplications().applications;
+  const systems = publicUnbanSystems();
   const pending = {
-    discord: getPendingForUser(applications, user.id, 'discord') || null,
     global: getPendingForUser(applications, user.id, 'global') || null,
-    globalchat: getPendingForUser(applications, user.id, 'globalchat') || null
+    globalchat: getPendingForUser(applications, user.id, 'globalchat') || null,
+    discord: null,
+    discordServers: {},
+    byKey: {}
   };
+  for (const system of systems) {
+    const found = getPendingForUser(applications, user.id, system.type, system.guildId || null) || null;
+    if (found) pending.byKey[pendingKey(system.type, system.guildId)] = found;
+    if (system.type === 'discord' && system.guildId) pending.discordServers[system.guildId] = found;
+  }
+  pending.discord = getPendingForUser(applications, user.id, 'discord', null) || null;
   const history = applications
     .filter((app) => app.user?.id === user.id)
     .sort((a, b) => String(b.submittedAt).localeCompare(String(a.submittedAt)))
     .slice(0, 10);
-  res.json({ ok: true, user, banInfo: userBanCache(user.id), pending, history });
+  res.json({ ok: true, user, banInfo: userBanCache(user.id), pending, history, systems });
 });
 
 app.post('/api/unban/apply', requireUser, (req, res) => {
   const user = req.session.discordUser;
   const type = String(req.body?.type || '').toLowerCase();
   if (!['discord', 'global', 'globalchat'].includes(type)) return res.status(400).json({ ok: false, error: 'Ungültiger Antrag-Typ.' });
+  const guildId = type === 'discord' ? String(req.body?.guildId || '').replace(/\D/g, '') : '';
+  const selectedSystem = findPublicUnbanSystem(type, guildId);
+  if (!selectedSystem) return res.status(400).json({ ok: false, error: 'Dieses Unban-System ist aktuell nicht aktiviert.' });
 
   const bannedAt = sanitizeText(req.body.bannedAt, 120);
   const banReason = sanitizeText(req.body.banReason, 1000);
@@ -2339,13 +2434,13 @@ app.post('/api/unban/apply', requireUser, (req, res) => {
   }
 
   const data = loadApplications();
-  const existing = getPendingForUser(data.applications, user.id, type);
+  const existing = getPendingForUser(data.applications, user.id, type, guildId || null);
   if (existing) {
     return res.status(409).json({ ok: false, error: 'Du hast bereits einen Antrag in Bearbeitung.', application: existing });
   }
 
   const cache = userBanCache(user.id);
-  const banInfo = cache?.[type] || null;
+  const banInfo = type === 'discord' && guildId ? (cache?.discordServers || {})[guildId] : (cache?.[type] || null);
   if (!banInfo?.checked) {
     const lookup = loadLookupRequests();
     lookup.requests[user.id] = { userId: user.id, requestedAt: new Date().toISOString() };
@@ -2364,10 +2459,12 @@ app.post('/api/unban/apply', requireUser, (req, res) => {
   const application = {
     id: `unban_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
     type,
+    guildId: guildId || null,
+    guildName: selectedSystem.serverName || selectedSystem.label || null,
     user,
     answers: { bannedAt, banReason, whyUnban },
     notifyDm,
-    knownBanInfo: cache[type] || null,
+    knownBanInfo: banInfo || null,
     status: 'pending',
     sentToDiscord: false,
     submittedAt: new Date().toISOString(),
@@ -2396,6 +2493,7 @@ app.post('/api/unban/bot/ban-cache', requireBot, (req, res) => {
   const data = loadBanCache();
   data.users[userId] = {
     discord: req.body.discord || { checked: true, banned: false, reason: 'Kein Discord-Ban gefunden.', duration: 'Nicht gebannt', until: null },
+    discordServers: req.body.discordServers && typeof req.body.discordServers === 'object' ? req.body.discordServers : {},
     global: req.body.global || { checked: true, banned: false, reason: 'Kein Blue Security Global-Ban gefunden.', duration: 'Nicht gebannt', until: null },
     globalchat: req.body.globalchat || { checked: true, banned: false, reason: 'Kein Globalchat-Ban gefunden.', duration: 'Nicht gebannt', until: null },
     updatedAt: new Date().toISOString()
