@@ -107,14 +107,28 @@ async function loadLiveData() {
 }
 
 
+function normalizeNavPath(href) {
+  try {
+    const url = new URL(href, window.location.origin);
+    return url.pathname.replace(/\/+$/, '') || '/';
+  } catch (error) {
+    return String(href || '').replace(/^\.?\//, '/').replace(/\/+$/, '') || '/';
+  }
+}
+
+function navHasPath(nav, path) {
+  const wanted = normalizeNavPath(path);
+  return Array.from(nav.querySelectorAll('a[href]')).some((link) => normalizeNavPath(link.getAttribute('href')) === wanted);
+}
+
 function ensureUpdatesNavLink() {
   const nav = $('[data-nav]');
-  if (!nav || nav.querySelector('a[href="updates.html"]')) return;
+  if (!nav || navHasPath(nav, '/updates.html') || navHasPath(nav, '/updates')) return;
   const link = document.createElement('a');
-  link.href = 'updates.html';
+  link.href = '/updates.html';
   link.textContent = 'Updates';
-  const memorial = nav.querySelector('a[href="memorial.html"]');
-  const dashboard = nav.querySelector('a[href="dashboard.html"]');
+  const memorial = Array.from(nav.querySelectorAll('a[href]')).find((item) => normalizeNavPath(item.getAttribute('href')) === '/memorial.html');
+  const dashboard = Array.from(nav.querySelectorAll('a[href]')).find((item) => normalizeNavPath(item.getAttribute('href')) === '/dashboard' || normalizeNavPath(item.getAttribute('href')) === '/dashboard.html');
   if (memorial) nav.insertBefore(link, memorial);
   else if (dashboard && dashboard.nextSibling) nav.insertBefore(link, dashboard.nextSibling);
   else nav.appendChild(link);
@@ -122,13 +136,15 @@ function ensureUpdatesNavLink() {
 
 function ensureMemorialNavLink() {
   const nav = $('[data-nav]');
-  if (!nav || nav.querySelector('a[href="memorial.html"]')) return;
+  if (!nav || navHasPath(nav, '/memorial.html') || navHasPath(nav, '/memorial')) return;
   const link = document.createElement('a');
-  link.href = 'memorial.html';
+  link.href = '/memorial.html';
   link.className = 'nav-memorial';
   link.textContent = '🕊 Kuba';
-  const dashboard = nav.querySelector('a[href="dashboard.html"]');
-  if (dashboard && dashboard.nextSibling) nav.insertBefore(link, dashboard.nextSibling);
+  const updates = Array.from(nav.querySelectorAll('a[href]')).find((item) => normalizeNavPath(item.getAttribute('href')) === '/updates.html' || normalizeNavPath(item.getAttribute('href')) === '/updates');
+  const dashboard = Array.from(nav.querySelectorAll('a[href]')).find((item) => normalizeNavPath(item.getAttribute('href')) === '/dashboard' || normalizeNavPath(item.getAttribute('href')) === '/dashboard.html');
+  if (updates && updates.nextSibling) nav.insertBefore(link, updates.nextSibling);
+  else if (dashboard && dashboard.nextSibling) nav.insertBefore(link, dashboard.nextSibling);
   else nav.appendChild(link);
 }
 
