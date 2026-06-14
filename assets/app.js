@@ -358,6 +358,17 @@ async function initUnbanPage() {
   let state = null;
   let loggedIn = false;
   let ticketAccess = { ready: false, hasPremium: false };
+  const unbanTypes = ['discord', 'global', 'globalchat'];
+
+  function unbanTypeLabel(type) {
+    if (type === 'global') return 'Blue Security Global Unban';
+    if (type === 'globalchat') return 'Globalchat Unban';
+    return 'Discord Unban';
+  }
+
+  function unbanTypeButtonLabel(type) {
+    return `${unbanTypeLabel(type)} wählen`;
+  }
 
   function showMessage(text, type = 'info') {
     if (!message) return;
@@ -370,7 +381,7 @@ async function initUnbanPage() {
     choices.hidden = false;
     form.hidden = true;
     if (historyBox) historyBox.hidden = true;
-    ['discord', 'global'].forEach((type) => {
+    unbanTypes.forEach((type) => {
       const infoBox = $(`[data-ban-info="${type}"]`);
       if (infoBox) {
         infoBox.innerHTML = '<strong>Status:</strong> Login erforderlich<br><strong>Hinweis:</strong> Melde dich oben rechts mit Discord an, damit wir deinen Ban-Status prüfen können.';
@@ -403,7 +414,7 @@ async function initUnbanPage() {
     choices.hidden = false;
     if (message) message.hidden = true;
 
-    ['discord', 'global'].forEach((type) => {
+    unbanTypes.forEach((type) => {
       const banInfo = data.banInfo?.[type];
       const isChecked = banInfo?.checked === true;
       const isBanned = banInfo?.banned === true;
@@ -427,7 +438,7 @@ async function initUnbanPage() {
         } else if (!isBanned) {
           btn.textContent = 'Kein Ban gefunden';
         } else {
-          btn.textContent = type === 'discord' ? 'Discord Unban wählen' : 'Global Unban wählen';
+          btn.textContent = unbanTypeButtonLabel(type);
         }
       }
     });
@@ -436,7 +447,7 @@ async function initUnbanPage() {
       historyBox.hidden = false;
       historyList.innerHTML = data.history.map((item) => `
         <div class="history-item">
-          <strong>${item.type === 'global' ? 'Blue Security Global Unban' : 'Discord Unban'}</strong>
+          <strong>${unbanTypeLabel(item.type)}</strong>
           <span>${statusLabel(item.status)}</span>
           <small>${escapeHtml(new Date(item.submittedAt).toLocaleString('de-DE'))}</small>
         </div>
@@ -454,7 +465,7 @@ async function initUnbanPage() {
       if (!banInfo?.checked) return showMessage('Dein Ban-Status wird noch geprüft. Bitte warte kurz und lade die Seite neu.', 'warn');
       if (!banInfo?.banned) return showMessage('Für diesen Bereich wurde kein aktiver Ban gefunden. Deshalb kannst du keinen Unban-Antrag senden.', 'warn');
       form.hidden = false;
-      $('[data-form-type]').textContent = selectedType === 'global' ? 'Blue Security Global Unban' : 'Discord Unban';
+      $('[data-form-type]').textContent = unbanTypeLabel(selectedType);
       form.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
   });
@@ -467,7 +478,7 @@ async function initUnbanPage() {
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (!loggedIn) return showMessage('Bitte melde dich zuerst oben rechts mit Discord an.', 'warn');
-    if (!selectedType) return showMessage('Bitte wähle zuerst Discord Unban oder Global Unban.', 'warn');
+    if (!selectedType) return showMessage('Bitte wähle zuerst einen Unban-Typ.', 'warn');
     const banInfo = state?.banInfo?.[selectedType];
     if (!banInfo?.checked) return showMessage('Dein Ban-Status wird noch geprüft. Bitte warte kurz und versuche es erneut.', 'warn');
     if (!banInfo?.banned) return showMessage('Für diesen Bereich wurde kein aktiver Ban gefunden. Ein Unban-Antrag ist deshalb nicht möglich.', 'warn');
