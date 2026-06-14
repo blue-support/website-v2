@@ -107,6 +107,19 @@ async function loadLiveData() {
 }
 
 
+function ensureUpdatesNavLink() {
+  const nav = $('[data-nav]');
+  if (!nav || nav.querySelector('a[href="updates.html"]')) return;
+  const link = document.createElement('a');
+  link.href = 'updates.html';
+  link.textContent = 'Updates';
+  const memorial = nav.querySelector('a[href="memorial.html"]');
+  const dashboard = nav.querySelector('a[href="dashboard.html"]');
+  if (memorial) nav.insertBefore(link, memorial);
+  else if (dashboard && dashboard.nextSibling) nav.insertBefore(link, dashboard.nextSibling);
+  else nav.appendChild(link);
+}
+
 function ensureMemorialNavLink() {
   const nav = $('[data-nav]');
   if (!nav || nav.querySelector('a[href="memorial.html"]')) return;
@@ -248,6 +261,7 @@ function initSupportRedirect() {
   }, 900);
 }
 
+ensureUpdatesNavLink();
 ensureMemorialNavLink();
 initNavigation();
 initReveal();
