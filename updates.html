@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#3b82f6" />
+  <meta name="description" content="Blue ⚡ Updates, Changelog und neue Bot-/Website-Versionen." />
+  <meta property="og:title" content="Blue ⚡ Updates" />
+  <meta property="og:description" content="Alle wichtigen Änderungen rund um Blue, Dashboard, Website und Bot." />
+  <meta property="og:type" content="website" />
+  <title>Updates — Blue ⚡</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+  <style>body{margin:0;background:#030712;color:#f7fbff;font-family:Inter,system-ui,sans-serif}a{color:inherit}</style>
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <canvas id="fx-canvas" aria-hidden="true"></canvas>
+  <div class="aurora"></div><div class="noise"></div><div class="orb one"></div><div class="orb two"></div>
+
+  <header class="site-header" data-header>
+    <a class="brand" href="index.html" aria-label="Blue Startseite"><span class="brand-mark">⚡</span><span class="brand-text">Blue</span></a>
+    <button class="nav-toggle" type="button" aria-label="Menü öffnen" aria-expanded="false" data-nav-toggle><span></span><span></span><span></span></button>
+    <nav class="nav" data-nav>
+      <a href="index.html">Home</a>
+      <a href="index.html#features">Features</a>
+      <a href="dashboard.html">Dashboard</a>
+      <a class="active" href="updates.html">Updates</a>
+      <a class="nav-memorial" href="memorial.html">🕊 Kuba</a>
+      <a href="status.html">Bot Status</a>
+      <a href="ticket.html">Ticket Support</a>
+      <a href="unban.html">Unban Antrag</a>
+      <a href="tos.html">TOS</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="impressum.html">Impressum</a>
+      <a class="nav-cta" href="https://dsc.blue-lol.de" target="_blank" rel="noopener">Support</a>
+    </nav>
+  </header>
+
+  <main class="updates-hero">
+    <section class="section">
+      <div class="wrapper updates-shell">
+        <div class="updates-intro reveal">
+          <article class="updates-main-card">
+            <div class="updates-title-row">
+              <p class="eyebrow"><span class="pulse-dot"></span> Changelog</p>
+              <span class="update-version-badge">⚡ Aktuell: V3.5.0</span>
+            </div>
+            <h1>Blue Updates</h1>
+            <p class="hero-text">Hier findest du alle wichtigen Änderungen rund um <strong>Blue ⚡</strong>, die Website, das Dashboard und den Bot. Neue Updates stehen immer ganz oben.</p>
+            <div class="update-meta-row" aria-label="Update Kategorien">
+              <span>🟢 Hinzugefügt</span>
+              <span>🔵 Geändert</span>
+              <span>🔴 Entfernt</span>
+              <span>🛠️ Bugfixes</span>
+            </div>
+          </article>
+
+          <aside class="update-side-card reveal delay-1">
+            <p class="eyebrow"><span class="dot"></span> Website Release</p>
+            <h3>Blue ist jetzt online!</h3>
+            <p>Unsere offizielle Website ist veröffentlicht. Alle wichtigen Informationen, Systeme und Dashboard-Setups sind nun zentral erreichbar.</p>
+            <a class="btn btn-primary" href="https://website.blue-lol.de" target="_blank" rel="noopener">Website öffnen</a>
+          </aside>
+        </div>
+
+        <article class="update-release-card reveal delay-2" id="v350">
+          <div class="update-release-head">
+            <div>
+              <p class="eyebrow"><span class="dot"></span> Jetziges Update</p>
+              <h2>Update V3.5.0</h2>
+              <p><strong>Website Release – Blue ist jetzt online!</strong> Es ist endlich soweit: Die offizielle Blue Website und das neue Dashboard sind veröffentlicht.</p>
+            </div>
+            <span class="update-version-badge">14.06.2026</span>
+          </div>
+
+          <div class="update-release-body">
+            <blockquote class="update-quote">
+              Ab sofort könnt ihr euch alle wichtigen Informationen rund um <strong>Blue</strong>, unsere Community und den Bot direkt auf der Website anschauen. Mit dem neuen Dashboard können viele Systeme deutlich einfacher verwaltet werden — ohne komplizierte Setup-Commands.
+            </blockquote>
+
+            <div class="update-category-grid">
+              <section class="update-category added">
+                <h3>🟢 Hinzugefügt</h3>
+                <ul>
+                  <li>Offizielle Blue Website veröffentlicht.</li>
+                  <li>Neues Blue Dashboard hinzugefügt.</li>
+                  <li>Neue Updates-Seite auf der Website.</li>
+                  <li>Dashboard-Module für Verify, Globalchat, Messages, Ticket, Moderation, Fun, Community und Security.</li>
+                  <li>Messages-Modul mit Discord-Embed-Builder, gespeicherten Vorlagen und echter Preview.</li>
+                  <li>Verification-Setup über Dashboard mit Manuell Verify und Auto Verify.</li>
+                  <li>Globalchat-Kanal kann jetzt im Dashboard eingestellt werden.</li>
+                  <li>Ticket-System mit Kategorien, Beschreibungen, Panel-Embed-Builder, Claim/Freigeben und Closed-Kategorie.</li>
+                  <li>Moderation-Modul mit Mod-Rollen, Command-Rechten und Moderations-Log.</li>
+                  <li>Fun-Modul für Counting, Errate-Zahl und Anonym-Chat.</li>
+                  <li>Community-Modul für Teamlist-Setup.</li>
+                  <li>Security-Modul mit Link-/Invite-Blocker und Sprachschutz.</li>
+                  <li>Ticket Support Seite mit Login, Premium-Prüfung und Web↔Discord Ticket-Chat.</li>
+                  <li>Unban Antrag System für Discord Unban und Blue Security Global Unban.</li>
+                  <li>Andenken-Seite für Kuba im Website-Nav.</li>
+                </ul>
+              </section>
+
+              <section class="update-category changed">
+                <h3>🔵 Bearbeitet / Geändert</h3>
+                <ul>
+                  <li>Setup-Systeme wurden von Slash-Commands ins Dashboard verschoben.</li>
+                  <li>Startseite wurde auf Dashboard-Setup und neue Module aktualisiert.</li>
+                  <li>Dashboard-Layout wurde größer, übersichtlicher und besser für Handy/Tablet optimiert.</li>
+                  <li>Rollen-Auswahl wurde auf klickbare Role-Chips umgestellt.</li>
+                  <li>Discord-Embed-Previews wurden größer und realistischer dargestellt.</li>
+                  <li>Discord Login wurde release-sicherer gemacht und nutzt längere Sessions.</li>
+                  <li>Dashboard-Daten werden robuster gespeichert und vom Bot zurück zur Website gesynct.</li>
+                  <li>Bestätigungen werden jetzt direkt sichtbar als Toast angezeigt und verschwinden nach 5 Sekunden.</li>
+                  <li>Ticket-, Verify- und Message-Panels sind professioneller aufgebaut.</li>
+                  <li>Globalchat, Tickets, Verify, Moderation und Security wurden im Dashboard zentralisiert.</li>
+                </ul>
+              </section>
+
+              <section class="update-category fixed">
+                <h3>🛠️ Bugfixes</h3>
+                <ul>
+                  <li>Mehrere kleinere Bot-Fehler wurden behoben.</li>
+                  <li>Stabilität vom Bot wurde verbessert.</li>
+                  <li>Dashboard-Serverliste zeigt gemeinsame Server zuverlässiger an.</li>
+                  <li>Channel-Selects im Dashboard wurden repariert.</li>
+                  <li>Gelöschte Message-Vorlagen tauchen nach Reload nicht mehr erneut auf.</li>
+                  <li>OAuth-Rate-Limit Verhalten wurde verbessert.</li>
+                  <li>Render-Neustarts überschreiben Dashboard-Daten weniger problematisch.</li>
+                  <li>Nav-Menü wurde angepasst, damit Texte wie „Ticket Support“ nicht umbrechen.</li>
+                  <li>Mobile Layouts wurden verbessert, damit nichts überlappt.</li>
+                  <li>Bot-Heartbeat und Website-Status wurden zuverlässiger gemacht.</li>
+                </ul>
+              </section>
+
+              <section class="update-category removed">
+                <h3>🔴 Entfernt</h3>
+                <ul>
+                  <li>Alte und unnötige Setup-Wege wurden ersetzt.</li>
+                  <li>Veraltete Setup-Commands wurden aus dem Workflow entfernt.</li>
+                  <li>/setup-globalchat und /remove-globalchat wurden durch Dashboard-Globalchat ersetzt.</li>
+                  <li>/setup-ticket-system wurde durch Dashboard-Ticket ersetzt.</li>
+                  <li>/setup-teamlist wurde durch Dashboard-Community ersetzt.</li>
+                  <li>/setup-counting, /setup-errate-zahl und /setup-anonymchat wurden durch Dashboard-Fun ersetzt.</li>
+                  <li>Alte Verify-Setup-Abläufe wurden durch Dashboard-Verify ersetzt.</li>
+                  <li>Unnötige doppelte Nav-Links und alte Texte wurden bereinigt.</li>
+                </ul>
+              </section>
+            </div>
+
+            <div class="update-note">
+              <strong>Danke an alle, die Blue unterstützen.</strong><br />
+              Wir haben viel Zeit und Arbeit in die Website, das Dashboard und die neuen Systeme gesteckt und freuen uns, euch das neue Update endlich zeigen zu können. Schaut gerne vorbei und gebt uns Feedback — jede Meinung hilft uns dabei, Blue weiter zu verbessern. Das ist erst der Anfang. 🚀
+            </div>
+
+            <div class="update-note">
+              <strong>Blue ⚡</strong> – Mehr Community. Mehr Aktivität. Mehr Spaß. Mehr Kontrolle.
+            </div>
+          </div>
+        </article>
+
+        <div class="update-empty-state reveal">
+          Weitere Updates erscheinen hier später automatisch oben über älteren Versionen.
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrapper footer-grid">
+      <div><a class="brand" href="index.html"><span class="brand-mark">⚡</span><span class="brand-text">Blue</span></a><p>Der All-in-One Discord Bot für Community Server, die professionell wachsen wollen.</p></div>
+      <div class="footer-links"><strong>Website</strong><a href="index.html">Home</a><a href="status.html">Bot Status</a><a href="updates.html">Updates</a><a href="ticket.html">Ticket Support</a><a href="unban.html">Unban Antrag</a><a href="support.html">Support</a></div>
+      <div class="footer-links"><strong>Legal</strong><a href="impressum.html">Impressum</a><a href="tos.html">Terms of Service</a><a href="privacy.html">Privacy</a></div>
+      <div class="footer-links"><strong>Action</strong><a href="dashboard.html">Dashboard öffnen</a><a href="https://dsc.blue-lol.de" target="_blank" rel="noopener">Discord öffnen</a></div>
+    </div>
+    <div class="wrapper copyright"><span>© 2026 Alle Rechte vorbehalten</span><span>Blue ⚡ Updates</span></div>
+  </footer>
+
+  <script src="assets/app.js"></script>
+</body>
+</html>

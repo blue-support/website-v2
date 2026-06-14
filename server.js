@@ -192,6 +192,10 @@ app.get('/', (_req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+app.get('/updates', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'updates.html'));
+});
+
 function loadJson(filePath, fallback) {
   try {
     if (!fs.existsSync(filePath)) return fallback;
