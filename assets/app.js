@@ -798,6 +798,7 @@ async function initDashboardPage() {
   const empty = $('[data-dashboard-empty]');
   const workspace = $('[data-dashboard-workspace]');
   const dashboardMain = $('.dashboard-main', root);
+  const dashboardSidebar = $('.dashboard-sidebar', root);
   const form = $('[data-dashboard-verify-form]');
   const globalchatForm = $('[data-dashboard-globalchat-form]');
   const messagesForm = $('[data-dashboard-messages-form]');
@@ -943,11 +944,18 @@ async function initDashboardPage() {
     const isServerPage = Boolean(requestedGuildId);
     root.classList.toggle('dashboard-picker-mode', !isServerPage);
     root.classList.toggle('dashboard-server-mode', isServerPage);
+
+    // /dashboard zeigt nur die Serverauswahl.
+    // /dashboard/<serverid> zeigt direkt die Module des Servers ohne erneute Serverauswahl.
+    if (dashboardSidebar) dashboardSidebar.hidden = isServerPage;
     if (dashboardMain) dashboardMain.hidden = !isServerPage;
+
     if (!isServerPage) {
       selectedGuildId = null;
       selectedGuildData = null;
       setWorkspaceVisible(false);
+    } else {
+      setWorkspaceVisible(true);
     }
     return isServerPage;
   }
@@ -2108,6 +2116,7 @@ async function initDashboardPage() {
     const auth = await authResponse.json();
     if (!auth.loggedIn) {
       setWorkspaceVisible(false);
+      if (dashboardSidebar) dashboardSidebar.hidden = false;
       if (dashboardMain) dashboardMain.hidden = true;
       if (serverList) serverList.innerHTML = '<p class="muted">Bitte oben rechts mit Discord einloggen.</p>';
       showDashboardMessage('Discord Login erforderlich, um dein Dashboard zu öffnen.', 'warn');
@@ -2139,11 +2148,13 @@ async function initDashboardPage() {
     if (requestedGuildId) {
       const requestedButton = $(`[data-dashboard-guild="${CSS.escape(requestedGuildId)}"]`, serverList);
       if (!requestedButton) {
+        if (dashboardSidebar) dashboardSidebar.hidden = false;
         setWorkspaceVisible(false);
         showDashboardMessage('Dieser Server wurde nicht gefunden oder Blue ist dort noch nicht bestätigt.', 'warn');
         return;
       }
       if (requestedButton.disabled) {
+        if (dashboardSidebar) dashboardSidebar.hidden = false;
         setWorkspaceVisible(false);
         showDashboardMessage('Dieser Server ist sichtbar, aber gesperrt. Du brauchst Administratorrechte, um Module zu öffnen.', 'warn');
         return;
