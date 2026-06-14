@@ -797,6 +797,7 @@ async function initDashboardPage() {
   const serverList = $('[data-dashboard-server-list]');
   const empty = $('[data-dashboard-empty]');
   const workspace = $('[data-dashboard-workspace]');
+  const dashboardMain = $('.dashboard-main', root);
   const form = $('[data-dashboard-verify-form]');
   const globalchatForm = $('[data-dashboard-globalchat-form]');
   const messagesForm = $('[data-dashboard-messages-form]');
@@ -936,6 +937,19 @@ async function initDashboardPage() {
   function setWorkspaceVisible(visible) {
     if (empty) empty.hidden = visible;
     if (workspace) workspace.hidden = !visible;
+  }
+
+  function setDashboardRouteMode(requestedGuildId = getDashboardPathGuildId()) {
+    const isServerPage = Boolean(requestedGuildId);
+    root.classList.toggle('dashboard-picker-mode', !isServerPage);
+    root.classList.toggle('dashboard-server-mode', isServerPage);
+    if (dashboardMain) dashboardMain.hidden = !isServerPage;
+    if (!isServerPage) {
+      selectedGuildId = null;
+      selectedGuildData = null;
+      setWorkspaceVisible(false);
+    }
+    return isServerPage;
   }
 
   function getDashboardPathGuildId() {
@@ -2088,10 +2102,13 @@ async function initDashboardPage() {
   }
 
   async function loadDashboard() {
+    const requestedGuildId = getDashboardPathGuildId();
+    setDashboardRouteMode(requestedGuildId);
     const authResponse = await fetch('/api/auth/me', { cache: 'no-store' });
     const auth = await authResponse.json();
     if (!auth.loggedIn) {
       setWorkspaceVisible(false);
+      if (dashboardMain) dashboardMain.hidden = true;
       if (serverList) serverList.innerHTML = '<p class="muted">Bitte oben rechts mit Discord einloggen.</p>';
       showDashboardMessage('Discord Login erforderlich, um dein Dashboard zu öffnen.', 'warn');
       return;
@@ -2107,13 +2124,17 @@ async function initDashboardPage() {
     } else {
       clearDashboardMessage();
     }
-    const requestedGuildId = getDashboardPathGuildId();
     $$('[data-dashboard-guild]', serverList).forEach((button) => {
       button.addEventListener('click', () => {
         const targetUrl = button.dataset.dashboardGuildUrl || dashboardGuildUrl(button.dataset.dashboardGuild);
         window.location.href = targetUrl;
       });
     });
+
+    if (!requestedGuildId) {
+      setDashboardRouteMode(null);
+      return;
+    }
 
     if (requestedGuildId) {
       const requestedButton = $(`[data-dashboard-guild="${CSS.escape(requestedGuildId)}"]`, serverList);
@@ -2128,6 +2149,7 @@ async function initDashboardPage() {
         return;
       }
       selectedGuildId = requestedGuildId;
+      if (dashboardMain) dashboardMain.hidden = false;
       $$('.dashboard-server-card', serverList).forEach((node) => node.classList.toggle('active', node === requestedButton));
       setWorkspaceVisible(true);
       await loadGuild(selectedGuildId, true);
