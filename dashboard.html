@@ -22,7 +22,7 @@
       <a href="index.html">Home</a>
       <a href="index.html#features">Features</a>
       <a href="status.html">Bot Status</a>
-      <a class="active" href="dashboard.html">Dashboard</a>
+      <a class="active" href="/dashboard">Dashboard</a>
       <a href="ticket.html">Ticket Support</a>
       <a href="unban.html">Unban Antrag</a>
       <a href="tos.html">TOS</a>
@@ -31,7 +31,7 @@
       <a href="https://discord.com/oauth2/authorize?client_id=1321889022380871681&permissions=8&integration_type=0&scope=bot" target="_blank" rel="noopener">Bot Einladen</a>
       <a class="nav-cta" href="https://dsc.blue-lol.de" target="_blank" rel="noopener">Support</a>
     </nav>
-    <div class="nav-auth" data-global-auth data-auth-return="/dashboard.html"><a class="nav-login" href="/auth/discord?return=/dashboard.html">Discord Login</a></div>
+    <div class="nav-auth" data-global-auth><a class="nav-login" href="/auth/discord?return=/dashboard">Discord Login</a></div>
   </header>
 
   <main>
@@ -40,7 +40,7 @@
         <div>
           <span class="eyebrow">Blue Control Center</span>
           <h1>Dashboard</h1>
-          <p>Verwalte Blue-Systeme direkt über die Website. Wähle einen gemeinsamen Server und öffne die Abteilung, die du konfigurieren möchtest.</p>
+          <p>Verwalte Blue-Systeme direkt über die Website. Wähle einen Server aus — danach öffnet sich automatisch die eigene Modul-Seite für diesen Server.</p>
           <div class="dashboard-hero-actions">
             <a class="btn primary" href="#dashboard-app">Dashboard öffnen</a>
             <span class="dashboard-security-pill">🔐 Discord Login erforderlich</span>
@@ -48,8 +48,8 @@
         </div>
         <div class="dashboard-command-center glass-panel dashboard-overview-card">
           <span class="eyebrow">Control Center</span>
-          <div class="command-line"><span>01</span> Server auswählen</div>
-          <div class="command-line"><span>02</span> Abteilung öffnen</div>
+          <div class="command-line"><span>01</span> Server anklicken</div>
+          <div class="command-line"><span>02</span> Modul-Seite öffnet sich</div>
           <div class="command-line"><span>03</span> Einstellungen speichern</div>
         </div>
       </div>
@@ -61,7 +61,7 @@
           <div class="dashboard-panel-head">
             <span class="eyebrow">Server</span>
             <h2>Server auswählen</h2>
-            <p>Server ohne Administratorrechte bleiben sichtbar, sind aber gesperrt.</p>
+            <p>Klick auf einen Server öffnet direkt die Modul-Ansicht auf einer eigenen Dashboard-Seite.</p>
           </div>
           <div class="dashboard-mini-info">
             <span>🛡️</span>
@@ -75,7 +75,7 @@
           <div class="dashboard-empty" data-dashboard-empty>
             <span class="choice-icon">⚡</span>
             <h2>Wähle einen Server</h2>
-            <p>Danach kannst du eine Abteilung öffnen und die gewünschten Systeme konfigurieren.</p>
+            <p>Klicke links auf einen Server. Danach wirst du automatisch zur Modul-Ansicht weitergeleitet.</p>
           </div>
 
           <div class="dashboard-workspace" data-dashboard-workspace hidden>
@@ -85,7 +85,7 @@
                 <h2 data-dashboard-server-name>Server</h2>
                 <p data-dashboard-server-meta>Feature-Konfiguration</p>
               </div>
-              <span class="chip online">Verbunden</span>
+              <div class="dashboard-workspace-actions"><a class="btn ghost" href="/dashboard#dashboard-app">Server wechseln</a><span class="chip online">Verbunden</span></div>
             </div>
 
             <div class="dashboard-departments dashboard-departments-pro">

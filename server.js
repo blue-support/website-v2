@@ -196,6 +196,13 @@ app.get('/updates', (_req, res) => {
   res.sendFile(path.join(__dirname, 'updates.html'));
 });
 
+// Eigene Dashboard-Serverseiten: /dashboard/123456789 oder /dashboard.123456789
+// Dadurch landet ein Nutzer nach dem Klick auf einen Server direkt in der Modul-Ansicht.
+app.get(/^\/dashboard(?:\/|\.)(\d+)\/?$/, (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.sendFile(path.join(__dirname, 'dashboard.html'));
+});
+
 function loadJson(filePath, fallback) {
   try {
     if (!fs.existsSync(filePath)) return fallback;
