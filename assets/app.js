@@ -310,7 +310,10 @@ async function initGlobalAuth() {
   }
 
   authSlots.forEach((slot) => {
-    const returnPath = slot.dataset.authReturn || (window.location.pathname || '/index.html');
+    let returnPath = slot.dataset.authReturn || (window.location.pathname || '/index.html');
+    if (/^\/dashboard(?:\/|\.)(\d+)/.test(window.location.pathname || '')) {
+      returnPath = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
+    }
     if (!auth.loggedIn || !auth.user) {
       const loginLabel = auth.hasCachedLogin ? 'Discord Login' : 'Discord Login';
       slot.innerHTML = `<a class="nav-login" data-discord-login-link href="/auth/discord?return=${encodeURIComponent(returnPath)}">${loginLabel}</a>`;
@@ -935,6 +938,25 @@ async function initDashboardPage() {
     if (workspace) workspace.hidden = !visible;
   }
 
+  function getDashboardPathGuildId() {
+    const path = window.location.pathname || '';
+    const slashMatch = path.match(/^\/dashboard\/(\d+)\/?$/);
+    if (slashMatch) return slashMatch[1];
+    const dotMatch = path.match(/^\/dashboard\.(\d+)$/);
+    if (dotMatch) return dotMatch[1];
+    const queryId = new URLSearchParams(window.location.search || '').get('server');
+    return /^\d+$/.test(queryId || '') ? queryId : null;
+  }
+
+  function dashboardGuildUrl(guildId) {
+    return `/dashboard/${encodeURIComponent(guildId)}#dashboard-app`;
+  }
+
+  function scrollDashboardAppIntoView() {
+    const target = document.getElementById('dashboard-app') || root;
+    window.setTimeout(() => target?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+  }
+
   function renderServers(guilds) {
     if (!serverList) return;
     if (!guilds.length) {
@@ -946,7 +968,7 @@ async function initDashboardPage() {
       const initial = (guild.name || '?').slice(0, 1).toUpperCase();
       const available = guild.available !== false;
       const reason = guild.unavailableReason || 'Nicht verfügbar - Administrator benötigt';
-      return `<button class="dashboard-server-card ${available ? '' : 'disabled'}" type="button" data-dashboard-guild="${escapeHtml(guild.id)}" ${available ? '' : 'disabled aria-disabled="true"'}><span class="server-icon">${icon ? `<img src="${escapeHtml(icon)}" alt="">` : escapeHtml(initial)}</span><span class="server-card-copy"><strong>${escapeHtml(guild.name)}</strong><small>${available ? `${formatValue(guild.memberCount)} Mitglieder` : escapeHtml(reason)}</small></span><span class="server-card-badge ${available ? 'ok' : 'locked'}">${available ? 'Admin' : 'Locked'}</span></button>`;
+      return `<button class="dashboard-server-card ${available ? '' : 'disabled'}" type="button" data-dashboard-guild="${escapeHtml(guild.id)}" ${available ? `data-dashboard-guild-url="${escapeHtml(dashboardGuildUrl(guild.id))}"` : 'disabled aria-disabled="true"'}><span class="server-icon">${icon ? `<img src="${escapeHtml(icon)}" alt="">` : escapeHtml(initial)}</span><span class="server-card-copy"><strong>${escapeHtml(guild.name)}</strong><small>${available ? `${formatValue(guild.memberCount)} Mitglieder · Module öffnen` : escapeHtml(reason)}</small></span><span class="server-card-badge ${available ? 'ok' : 'locked'}">${available ? 'Öffnen' : 'Locked'}</span></button>`;
     }).join('');
   }
 
@@ -2085,17 +2107,34 @@ async function initDashboardPage() {
     } else {
       clearDashboardMessage();
     }
+    const requestedGuildId = getDashboardPathGuildId();
     $$('[data-dashboard-guild]', serverList).forEach((button) => {
-      button.addEventListener('click', async () => {
-        selectedGuildId = button.dataset.dashboardGuild;
-        $$('.dashboard-server-card', serverList).forEach((node) => node.classList.toggle('active', node === button));
-        setWorkspaceVisible(true);
-        await loadGuild(selectedGuildId);
+      button.addEventListener('click', () => {
+        const targetUrl = button.dataset.dashboardGuildUrl || dashboardGuildUrl(button.dataset.dashboardGuild);
+        window.location.href = targetUrl;
       });
     });
+
+    if (requestedGuildId) {
+      const requestedButton = $(`[data-dashboard-guild="${CSS.escape(requestedGuildId)}"]`, serverList);
+      if (!requestedButton) {
+        setWorkspaceVisible(false);
+        showDashboardMessage('Dieser Server wurde nicht gefunden oder Blue ist dort noch nicht bestätigt.', 'warn');
+        return;
+      }
+      if (requestedButton.disabled) {
+        setWorkspaceVisible(false);
+        showDashboardMessage('Dieser Server ist sichtbar, aber gesperrt. Du brauchst Administratorrechte, um Module zu öffnen.', 'warn');
+        return;
+      }
+      selectedGuildId = requestedGuildId;
+      $$('.dashboard-server-card', serverList).forEach((node) => node.classList.toggle('active', node === requestedButton));
+      setWorkspaceVisible(true);
+      await loadGuild(selectedGuildId, true);
+    }
   }
 
-  async function loadGuild(guildId) {
+  async function loadGuild(guildId, focusModules = false) {
     showDashboardMessage('Serverdaten werden geladen...', 'info');
     const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(guildId)}`, { cache: 'no-store' });
     const data = await response.json();
@@ -2105,6 +2144,7 @@ async function initDashboardPage() {
     }
     clearDashboardMessage();
     renderGuildConfig(data);
+    if (focusModules || window.location.hash === '#dashboard-app') scrollDashboardAppIntoView();
   }
 
   function updateVerifyPreview() {
