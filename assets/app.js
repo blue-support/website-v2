@@ -354,11 +354,24 @@ async function initUnbanPage() {
   const historyList = $('[data-history-list]');
   if (!choices || !form) return;
 
-  let selectedType = null;
+  let selectedSystem = null;
   let state = null;
+  let systems = [];
   let loggedIn = false;
-  let ticketAccess = { ready: false, hasPremium: false };
-  const unbanTypes = ['discord', 'global', 'globalchat'];
+
+  const fallbackSystems = [
+    { id: 'global', type: 'global', label: 'Blue Security Global Unban', description: 'Für einen Ban aus dem Blue Security Global-Ban-System.', banKey: 'global', always: true },
+    { id: 'globalchat', type: 'globalchat', label: 'Globalchat Unban', description: 'Für einen Ban aus dem normalen Blue Globalchat.', banKey: 'globalchat', always: true },
+  ];
+
+  function systemKey(system) {
+    return system?.id || (system?.type === 'discord' ? `discord:${system.guildId || ''}` : system?.type || 'discord');
+  }
+
+  function cssEscape(value) {
+    if (window.CSS && typeof window.CSS.escape === 'function') return window.CSS.escape(String(value));
+    return String(value).replace(/[^a-zA-Z0-9_-]/g, '\\$&');
+  }
 
   function unbanTypeLabel(type) {
     if (type === 'global') return 'Blue Security Global Unban';
@@ -366,8 +379,21 @@ async function initUnbanPage() {
     return 'Discord Unban';
   }
 
-  function unbanTypeButtonLabel(type) {
-    return `${unbanTypeLabel(type)} wählen`;
+  function unbanSystemLabel(system) {
+    if (!system) return 'Unban Antrag';
+    return system.label || (system.type === 'discord' && system.serverName ? `${system.serverName} Unban` : unbanTypeLabel(system.type));
+  }
+
+  function historyLabel(item) {
+    if (!item) return 'Unban Antrag';
+    if (item.type === 'discord' && item.guildName) return `${item.guildName} Unban`;
+    return unbanTypeLabel(item.type);
+  }
+
+  function unbanIcon(system) {
+    if (system.type === 'global') return '🌍';
+    if (system.type === 'globalchat') return '💬';
+    return '🛡️';
   }
 
   function showMessage(text, type = 'info') {
@@ -377,17 +403,55 @@ async function initUnbanPage() {
     message.textContent = text;
   }
 
+  async function loadSystems() {
+    try {
+      const response = await fetch('/api/unban/systems', { cache: 'no-store' });
+      const data = await response.json();
+      systems = Array.isArray(data.systems) && data.systems.length ? data.systems : fallbackSystems;
+    } catch {
+      systems = fallbackSystems;
+    }
+    renderChoices();
+  }
+
+  function renderChoices() {
+    choices.innerHTML = systems.map((system) => `
+      <article class="unban-choice" data-unban-choice-key="${escapeHtml(systemKey(system))}">
+        <span class="choice-icon">${escapeHtml(unbanIcon(system))}</span>
+        <h3>${escapeHtml(unbanSystemLabel(system))}</h3>
+        <p>${escapeHtml(system.description || 'Unban-Antrag über Blue stellen.')}</p>
+        <div class="ban-info" data-ban-info-key="${escapeHtml(systemKey(system))}">Ban-Status wird geladen...</div>
+        <button class="btn ghost" type="button" data-select-unban="${escapeHtml(systemKey(system))}">${escapeHtml(unbanSystemLabel(system))} wählen</button>
+      </article>
+    `).join('');
+  }
+
+  function banInfoForSystem(data, system) {
+    if (!data?.banInfo || !system) return null;
+    if (system.type === 'discord' && system.guildId) return data.banInfo.discordServers?.[String(system.guildId)] || null;
+    return data.banInfo?.[system.type] || null;
+  }
+
+  function pendingForSystem(data, system) {
+    if (!data?.pending || !system) return null;
+    const key = systemKey(system);
+    if (data.pending.byKey?.[key]) return data.pending.byKey[key];
+    if (system.type === 'discord' && system.guildId) return data.pending.discordServers?.[String(system.guildId)] || null;
+    return data.pending?.[system.type] || null;
+  }
+
   function setLoginRequiredState() {
     choices.hidden = false;
     form.hidden = true;
     if (historyBox) historyBox.hidden = true;
-    unbanTypes.forEach((type) => {
-      const infoBox = $(`[data-ban-info="${type}"]`);
+    systems.forEach((system) => {
+      const key = systemKey(system);
+      const infoBox = $(`[data-ban-info-key="${cssEscape(key)}"]`);
       if (infoBox) {
         infoBox.innerHTML = '<strong>Status:</strong> Login erforderlich<br><strong>Hinweis:</strong> Melde dich oben rechts mit Discord an, damit wir deinen Ban-Status prüfen können.';
       }
-      const choice = $(`[data-unban-choice="${type}"]`);
-      const btn = $(`[data-select-unban="${type}"]`);
+      const choice = $(`[data-unban-choice-key="${cssEscape(key)}"]`);
+      const btn = $(`[data-select-unban="${cssEscape(key)}"]`);
       if (choice) choice.classList.add('disabled');
       if (btn) {
         btn.disabled = true;
@@ -399,6 +463,7 @@ async function initUnbanPage() {
   }
 
   async function refreshData() {
+    await loadSystems();
     const response = await fetch('/api/auth/me', { cache: 'no-store' });
     const auth = await response.json();
     loggedIn = Boolean(auth.loggedIn);
@@ -411,18 +476,23 @@ async function initUnbanPage() {
     await fetch('/api/unban/request-lookup', { method: 'POST' }).catch(() => null);
     const data = await (await fetch('/api/unban/me', { cache: 'no-store' })).json();
     state = data;
+    if (Array.isArray(data.systems) && data.systems.length) {
+      systems = data.systems;
+      renderChoices();
+    }
     choices.hidden = false;
     if (message) message.hidden = true;
 
-    unbanTypes.forEach((type) => {
-      const banInfo = data.banInfo?.[type];
+    systems.forEach((system) => {
+      const key = systemKey(system);
+      const banInfo = banInfoForSystem(data, system);
       const isChecked = banInfo?.checked === true;
       const isBanned = banInfo?.banned === true;
-      const infoBox = $(`[data-ban-info="${type}"]`);
+      const infoBox = $(`[data-ban-info-key="${cssEscape(key)}"]`);
       if (infoBox) infoBox.innerHTML = formatBanPanel(banInfo);
-      const choice = $(`[data-unban-choice="${type}"]`);
-      const btn = $(`[data-select-unban="${type}"]`);
-      const pending = data.pending?.[type];
+      const choice = $(`[data-unban-choice-key="${cssEscape(key)}"]`);
+      const btn = $(`[data-select-unban="${cssEscape(key)}"]`);
+      const pending = pendingForSystem(data, system);
       const disabled = Boolean(pending) || !isChecked || !isBanned;
       if (choice) {
         choice.classList.toggle('disabled', disabled);
@@ -431,15 +501,10 @@ async function initUnbanPage() {
       if (btn) {
         btn.disabled = disabled;
         btn.setAttribute('aria-disabled', String(disabled));
-        if (pending) {
-          btn.textContent = 'Bereits in Bearbeitung';
-        } else if (!isChecked) {
-          btn.textContent = 'Ban-Status wird geprüft';
-        } else if (!isBanned) {
-          btn.textContent = 'Kein Ban gefunden';
-        } else {
-          btn.textContent = unbanTypeButtonLabel(type);
-        }
+        if (pending) btn.textContent = 'Bereits in Bearbeitung';
+        else if (!isChecked) btn.textContent = 'Ban-Status wird geprüft';
+        else if (!isBanned) btn.textContent = 'Kein Ban gefunden';
+        else btn.textContent = `${unbanSystemLabel(system)} wählen`;
       }
     });
 
@@ -447,7 +512,7 @@ async function initUnbanPage() {
       historyBox.hidden = false;
       historyList.innerHTML = data.history.map((item) => `
         <div class="history-item">
-          <strong>${unbanTypeLabel(item.type)}</strong>
+          <strong>${escapeHtml(historyLabel(item))}</strong>
           <span>${statusLabel(item.status)}</span>
           <small>${escapeHtml(new Date(item.submittedAt).toLocaleString('de-DE'))}</small>
         </div>
@@ -455,35 +520,37 @@ async function initUnbanPage() {
     }
   }
 
-  $$('[data-select-unban]').forEach((button) => {
-    button.addEventListener('click', () => {
-      if (!loggedIn) return;
-      selectedType = button.dataset.selectUnban;
-      const pending = state?.pending?.[selectedType];
-      const banInfo = state?.banInfo?.[selectedType];
-      if (pending) return showMessage('Du hast bereits einen Antrag in Bearbeitung.', 'warn');
-      if (!banInfo?.checked) return showMessage('Dein Ban-Status wird noch geprüft. Bitte warte kurz und lade die Seite neu.', 'warn');
-      if (!banInfo?.banned) return showMessage('Für diesen Bereich wurde kein aktiver Ban gefunden. Deshalb kannst du keinen Unban-Antrag senden.', 'warn');
-      form.hidden = false;
-      $('[data-form-type]').textContent = unbanTypeLabel(selectedType);
-      form.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    });
+  choices.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-select-unban]');
+    if (!button || button.disabled || !loggedIn) return;
+    const key = String(button.dataset.selectUnban || '');
+    selectedSystem = systems.find((system) => systemKey(system) === key) || null;
+    if (!selectedSystem) return;
+    const pending = pendingForSystem(state, selectedSystem);
+    const banInfo = banInfoForSystem(state, selectedSystem);
+    if (pending) return showMessage('Du hast bereits einen Antrag in Bearbeitung.', 'warn');
+    if (!banInfo?.checked) return showMessage('Dein Ban-Status wird noch geprüft. Bitte warte kurz und lade die Seite neu.', 'warn');
+    if (!banInfo?.banned) return showMessage('Für diesen Bereich wurde kein aktiver Ban gefunden. Deshalb kannst du keinen Unban-Antrag senden.', 'warn');
+    form.hidden = false;
+    $('[data-form-type]').textContent = unbanSystemLabel(selectedSystem);
+    form.scrollIntoView({ behavior: 'smooth', block: 'center' });
   });
 
   $('[data-cancel-unban]')?.addEventListener('click', () => {
     form.hidden = true;
-    selectedType = null;
+    selectedSystem = null;
   });
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (!loggedIn) return showMessage('Bitte melde dich zuerst oben rechts mit Discord an.', 'warn');
-    if (!selectedType) return showMessage('Bitte wähle zuerst einen Unban-Typ.', 'warn');
-    const banInfo = state?.banInfo?.[selectedType];
+    if (!selectedSystem) return showMessage('Bitte wähle zuerst einen Unban-Typ.', 'warn');
+    const banInfo = banInfoForSystem(state, selectedSystem);
     if (!banInfo?.checked) return showMessage('Dein Ban-Status wird noch geprüft. Bitte warte kurz und versuche es erneut.', 'warn');
     if (!banInfo?.banned) return showMessage('Für diesen Bereich wurde kein aktiver Ban gefunden. Ein Unban-Antrag ist deshalb nicht möglich.', 'warn');
     const payload = Object.fromEntries(new FormData(form).entries());
-    payload.type = selectedType;
+    payload.type = selectedSystem.type;
+    if (selectedSystem.guildId) payload.guildId = selectedSystem.guildId;
     payload.notifyDm = Boolean(form.querySelector('[name="notifyDm"]')?.checked);
 
     const response = await fetch('/api/unban/apply', {
@@ -497,6 +564,7 @@ async function initUnbanPage() {
     }
     form.reset();
     form.hidden = true;
+    selectedSystem = null;
     showMessage('Dein Antrag wurde gesendet. Das Team prüft ihn jetzt im Discord-Log.', 'success');
     await refreshData();
   });
@@ -506,49 +574,6 @@ async function initUnbanPage() {
   setInterval(refreshData, 30000);
 }
 
-
-
-function discordAvatarUrl(user) {
-  if (!user) return '';
-  if (user.avatar && String(user.avatar).startsWith('http')) return user.avatar;
-  if (user.avatar && user.id) return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=96`;
-  return '';
-}
-
-function ticketTypeLabel(type) {
-  return type === 'head' ? 'Leitung' : 'Allgemeiner Support';
-}
-
-function ticketStatusLabel(status) {
-  const labels = { pending_channel: 'Kanal wird erstellt', open: 'Offen', closed: 'Geschlossen' };
-  return labels[status] || status || 'Unbekannt';
-}
-
-function ticketRankClass(rank) {
-  const normalized = String(rank || '').trim().toLowerCase();
-  if (normalized === 'ceo') return 'ceo';
-  if (normalized === 'administrator') return 'administrator';
-  if (normalized === 'moderator') return 'moderator';
-  return 'default';
-}
-
-function renderTicketMessage(message) {
-  const type = message.authorType || 'system';
-  const author = message.author || {};
-  const name = type === 'system' ? 'Blue System' : (author.global_name || author.name || author.username || 'Unbekannt');
-  const avatar = discordAvatarUrl(author);
-  const initial = name.slice(0, 1).toUpperCase() || '⚡';
-  const attachments = Array.isArray(message.attachments) && message.attachments.length
-    ? `<div class="ticket-attachments">${message.attachments.map((file) => `<a class="ticket-attachment" href="${escapeHtml(file.url)}" target="_blank" rel="noopener">📎 ${escapeHtml(file.originalName || file.filename || 'Datei')}</a>`).join('')}</div>`
-    : '';
-  if (type === 'system') {
-    return `<div class="ticket-message system"><p>${escapeHtml(message.text || '')}</p><small>${escapeHtml(new Date(message.createdAt).toLocaleString('de-DE'))}</small>${attachments}</div>`;
-  }
-  const rank = type === 'staff' && author.rank
-    ? `<span class="ticket-rank-badge ${ticketRankClass(author.rank)}">${escapeHtml(author.rank)}</span>`
-    : '';
-  return `<div class="ticket-message ${type === 'user' ? 'user' : 'staff'}"><div class="ticket-message-head"><span class="ticket-message-avatar">${avatar ? `<img src="${escapeHtml(avatar)}" alt="">` : escapeHtml(initial)}</span><div><div class="ticket-message-author">${escapeHtml(name)}${rank}</div><div class="ticket-message-time">${escapeHtml(new Date(message.createdAt).toLocaleString('de-DE'))}</div></div></div>${message.text ? `<p>${escapeHtml(message.text)}</p>` : ''}${attachments}</div>`;
-}
 
 async function initTicketPage() {
   const root = $('[data-ticket-page]');
@@ -797,6 +822,7 @@ async function initDashboardPage() {
   let securityIgnoredChannelIds = new Set();
   let securityLanguageIgnoredRoleIds = new Set();
   let securityLanguageIgnoredChannelIds = new Set();
+  let securityUnbanRoleIds = new Set();
   const dashboardSecurityLanguageLabels = { de: 'Deutsch', en: 'Englisch', tr: 'Türkisch', pl: 'Polnisch', fr: 'Französisch', es: 'Spanisch', it: 'Italienisch', nl: 'Niederländisch' };
   let funDirty = false;
   let communityDirty = false;
@@ -1741,6 +1767,53 @@ async function initDashboardPage() {
     });
   }
 
+
+  function renderSecurityUnbanSelectedRoles() {
+    const container = $('[data-dashboard-security-unban-selected-roles]');
+    const count = $('[data-dashboard-security-unban-role-count]');
+    if (count) count.textContent = `${securityUnbanRoleIds.size}/5`;
+    if (!container) return;
+    const selected = dashboardRoles.filter((role) => securityUnbanRoleIds.has(String(role.id)));
+    if (!selected.length) {
+      container.innerHTML = '<span class="muted">Keine Team-Rolle ausgewählt</span>';
+      return;
+    }
+    container.innerHTML = selected.map((role) => selectedRoleTagHtml(role, 'data-security-unban-role-remove')).join('');
+    $$('[data-security-unban-role-remove]', container).forEach((button) => {
+      button.addEventListener('click', () => {
+        securityUnbanRoleIds.delete(String(button.dataset.securityUnbanRoleRemove || ''));
+        securityDirty = true;
+        renderSecurityPickers();
+      });
+    });
+  }
+
+  function renderSecurityUnbanRolePicker() {
+    const container = $('[data-dashboard-security-unban-role-picker]');
+    if (!container) return;
+    if (!dashboardRoles.length) {
+      container.innerHTML = '<p class="muted">Keine Rollen gefunden.</p>';
+      return;
+    }
+    container.innerHTML = dashboardRoles.map((role) => {
+      const active = securityUnbanRoleIds.has(String(role.id));
+      return `<button class="role-chip ${active ? 'active' : ''}" type="button" data-security-unban-role-chip="${escapeHtml(role.id)}"${roleColorStyle(role)}><span class="role-dot"></span>@${escapeHtml(role.name)}</button>`;
+    }).join('');
+    $$('[data-security-unban-role-chip]', container).forEach((button) => {
+      button.addEventListener('click', () => {
+        const id = String(button.dataset.securityUnbanRoleChip || '');
+        if (!id) return;
+        if (securityUnbanRoleIds.has(id)) securityUnbanRoleIds.delete(id);
+        else {
+          if (securityUnbanRoleIds.size >= 5) return dashboardNotify('security', 'Du kannst maximal 5 Unban-Teamrollen auswählen.', 'warn');
+          securityUnbanRoleIds.add(id);
+        }
+        securityDirty = true;
+        renderSecurityPickers();
+      });
+    });
+  }
+
   function updateSecurityPreview() {
     if (!securityForm) return;
     const linksEnabled = securityForm.querySelector('[name="securityLinksEnabled"]')?.checked;
@@ -1772,6 +1845,20 @@ async function initDashboardPage() {
       const names = dashboardChannels.filter((channel) => securityLanguageIgnoredChannelIds.has(String(channel.id))).map((channel) => `#${channel.name}`);
       languageChannelsPreview.textContent = names.length ? names.join(', ') : 'Keine';
     }
+    const unbanEnabled = securityForm.querySelector('[name="securityUnbanEnabled"]')?.checked;
+    const unbanEnabledPreview = $('[data-dashboard-security-unban-enabled-preview]');
+    if (unbanEnabledPreview) unbanEnabledPreview.textContent = unbanEnabled ? 'Aktiv · Website-Anträge gehen in den Log-Kanal' : 'Nicht aktiv';
+    const unbanLogPreview = $('[data-dashboard-security-unban-log-preview]');
+    if (unbanLogPreview) {
+      const selectedLog = String(securityForm.querySelector('[name="securityUnbanLogChannelId"]')?.value || '');
+      const channel = dashboardChannels.find((item) => String(item.id) === selectedLog);
+      unbanLogPreview.textContent = channel ? `#${channel.name}` : 'Kein Log-Kanal';
+    }
+    const unbanRolesPreview = $('[data-dashboard-security-unban-roles-preview]');
+    if (unbanRolesPreview) {
+      const names = dashboardRoles.filter((role) => securityUnbanRoleIds.has(String(role.id))).map((role) => `@${role.name}`);
+      unbanRolesPreview.textContent = names.length ? names.join(', ') : 'Admins/Owner';
+    }
   }
 
   function renderSecurityPickers() {
@@ -1783,6 +1870,8 @@ async function initDashboardPage() {
     renderSecurityLanguageSelectedRoles();
     renderSecurityLanguageChannelPicker();
     renderSecurityLanguageSelectedChannels();
+    renderSecurityUnbanRolePicker();
+    renderSecurityUnbanSelectedRoles();
     updateSecurityPreview();
   }
 
@@ -1791,19 +1880,24 @@ async function initDashboardPage() {
     const config = data.security || {};
     const links = config.links || {};
     const language = config.language || {};
+    const unban = config.unban || {};
     const enabledInput = securityForm.querySelector('[name="securityLinksEnabled"]');
     if (enabledInput) enabledInput.checked = Boolean(links.enabled);
     const languageEnabledInput = securityForm.querySelector('[name="securityLanguageEnabled"]');
     if (languageEnabledInput) languageEnabledInput.checked = Boolean(language.enabled);
     const languageSelect = securityForm.querySelector('[name="securityPreferredLanguage"]');
     if (languageSelect) languageSelect.value = language.preferred || language.language || 'de';
+    const unbanEnabledInput = securityForm.querySelector('[name="securityUnbanEnabled"]');
+    if (unbanEnabledInput) unbanEnabledInput.checked = Boolean(unban.enabled);
+    setDashboardSelectOptions('[data-dashboard-security-unban-log-channel]', channels || dashboardChannels, unban.logChannelId || unban.log_channel_id || '', 'Log-Kanal auswählen');
     securityIgnoredRoleIds = new Set((links.ignoredRoleIds || links.ignored_role_ids || []).map(String));
     securityIgnoredChannelIds = new Set((links.ignoredChannelIds || links.ignored_channel_ids || []).map(String));
     securityLanguageIgnoredRoleIds = new Set((language.ignoredRoleIds || language.ignored_role_ids || []).map(String));
     securityLanguageIgnoredChannelIds = new Set((language.ignoredChannelIds || language.ignored_channel_ids || []).map(String));
+    securityUnbanRoleIds = new Set((unban.teamRoleIds || unban.team_role_ids || []).map(String));
     const status = $('[data-dashboard-security-status]');
     if (status) {
-      const activeCount = [Boolean(links.enabled), Boolean(language.enabled)].filter(Boolean).length;
+      const activeCount = [Boolean(links.enabled), Boolean(language.enabled), Boolean(unban.enabled)].filter(Boolean).length;
       status.textContent = activeCount ? `${activeCount} aktiv` : 'Nicht aktiv';
       status.className = `chip ${activeCount ? 'online' : ''}`;
     }
@@ -2140,6 +2234,11 @@ async function initDashboardPage() {
         preferred: String(formData.get('securityPreferredLanguage') || 'de'),
         ignoredRoleIds: Array.from(securityLanguageIgnoredRoleIds),
         ignoredChannelIds: Array.from(securityLanguageIgnoredChannelIds),
+      },
+      unban: {
+        enabled: formData.get('securityUnbanEnabled') === 'on',
+        logChannelId: String(formData.get('securityUnbanLogChannelId') || ''),
+        teamRoleIds: Array.from(securityUnbanRoleIds).slice(0, 5),
       }
     };
     const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/security`, {
@@ -2154,6 +2253,7 @@ async function initDashboardPage() {
     const activeParts = [];
     if (payload.links.enabled) activeParts.push('Link-Schutz');
     if (payload.language.enabled) activeParts.push('Sprachschutz');
+    if (payload.unban.enabled) activeParts.push('Unban-System');
     dashboardNotify('security', activeParts.length ? `${activeParts.join(' & ')} gespeichert.` : 'Security gespeichert. Alle Schutzsysteme sind deaktiviert.', 'success');
   });
 
