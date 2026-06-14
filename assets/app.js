@@ -954,6 +954,7 @@ async function initDashboardPage() {
   function setWorkspaceVisible(visible) {
     if (empty) empty.hidden = visible;
     if (workspace) workspace.hidden = !visible;
+    if (!visible) clearDashboardModuleSelection();
   }
 
   function setDashboardRouteMode(requestedGuildId = getDashboardPathGuildId()) {
@@ -993,6 +994,14 @@ async function initDashboardPage() {
   function scrollDashboardAppIntoView() {
     const target = document.getElementById('dashboard-app') || root;
     window.setTimeout(() => target?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+  }
+
+  function clearDashboardModuleSelection() {
+    $$('[data-dashboard-section]').forEach((node) => node.classList.remove('active'));
+    [form, globalchatForm, ticketForm, moderationForm, securityForm, funForm, communityForm, messagesForm].forEach((node) => {
+      if (node) node.hidden = true;
+    });
+    if (soon) soon.hidden = true;
   }
 
   function renderServers(guilds) {
@@ -2193,6 +2202,7 @@ async function initDashboardPage() {
     }
     clearDashboardMessage();
     renderGuildConfig(data);
+    clearDashboardModuleSelection();
     if (focusModules || window.location.hash === '#dashboard-app') scrollDashboardAppIntoView();
   }
 
