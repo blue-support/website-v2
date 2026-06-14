@@ -2471,3 +2471,32 @@ img,video,canvas{max-width:100%}
   .update-category { padding: 18px; }
   .update-side-card { padding: 20px; }
 }
+
+/* Mobile Dashboard Module Visibility Fix
+   Auf Handy/Tablet werden die Modul-Karten nicht mehr als horizontale Scroll-Leiste versteckt,
+   sondern als normales Grid untereinander angezeigt. */
+@media (max-width: 980px) {
+  .dashboard-shell-pro .dashboard-departments-pro,
+  .dashboard-departments.dashboard-departments-pro {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 12px !important;
+    overflow: visible !important;
+    overflow-x: visible !important;
+    max-height: none !important;
+    padding-bottom: 0 !important;
+  }
+
+  .dashboard-shell-pro .dashboard-departments-pro .dashboard-dept,
+  .dashboard-departments.dashboard-departments-pro .dashboard-dept {
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .dashboard-shell-pro .dashboard-departments-pro,
+  .dashboard-departments.dashboard-departments-pro {
+    grid-template-columns: 1fr !important;
+  }
+}
