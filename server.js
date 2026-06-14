@@ -2296,7 +2296,8 @@ function userBanCache(userId) {
   const cache = loadBanCache();
   return cache.users[String(userId)] || {
     discord: { checked: false, banned: false, reason: 'Noch nicht vom Bot geprüft.', duration: 'Unbekannt', until: null },
-    global: { checked: false, banned: false, reason: 'Noch nicht vom Bot geprüft.', duration: 'Unbekannt', until: null }
+    global: { checked: false, banned: false, reason: 'Noch nicht vom Bot geprüft.', duration: 'Unbekannt', until: null },
+    globalchat: { checked: false, banned: false, reason: 'Noch nicht vom Bot geprüft.', duration: 'Unbekannt', until: null }
   };
 }
 
@@ -2313,7 +2314,8 @@ app.get('/api/unban/me', requireUser, (req, res) => {
   const applications = loadApplications().applications;
   const pending = {
     discord: getPendingForUser(applications, user.id, 'discord') || null,
-    global: getPendingForUser(applications, user.id, 'global') || null
+    global: getPendingForUser(applications, user.id, 'global') || null,
+    globalchat: getPendingForUser(applications, user.id, 'globalchat') || null
   };
   const history = applications
     .filter((app) => app.user?.id === user.id)
@@ -2325,7 +2327,7 @@ app.get('/api/unban/me', requireUser, (req, res) => {
 app.post('/api/unban/apply', requireUser, (req, res) => {
   const user = req.session.discordUser;
   const type = String(req.body?.type || '').toLowerCase();
-  if (!['discord', 'global'].includes(type)) return res.status(400).json({ ok: false, error: 'Ungültiger Antrag-Typ.' });
+  if (!['discord', 'global', 'globalchat'].includes(type)) return res.status(400).json({ ok: false, error: 'Ungültiger Antrag-Typ.' });
 
   const bannedAt = sanitizeText(req.body.bannedAt, 120);
   const banReason = sanitizeText(req.body.banReason, 1000);
@@ -2351,7 +2353,12 @@ app.post('/api/unban/apply', requireUser, (req, res) => {
     return res.status(409).json({ ok: false, error: 'Dein Ban-Status wird noch vom Bot geprüft. Bitte warte kurz und versuche es erneut.' });
   }
   if (!banInfo?.banned) {
-    return res.status(403).json({ ok: false, error: type === 'global' ? 'Für dich wurde kein aktiver Blue Security Global-Ban gefunden. Ein Antrag ist deshalb nicht möglich.' : 'Für dich wurde kein aktiver Discord-Ban gefunden. Ein Antrag ist deshalb nicht möglich.' });
+    const errorText = type === 'global'
+      ? 'Für dich wurde kein aktiver Blue Security Global-Ban gefunden. Ein Antrag ist deshalb nicht möglich.'
+      : (type === 'globalchat'
+        ? 'Für dich wurde kein aktiver Globalchat-Ban gefunden. Ein Antrag ist deshalb nicht möglich.'
+        : 'Für dich wurde kein aktiver Discord-Ban gefunden. Ein Antrag ist deshalb nicht möglich.');
+    return res.status(403).json({ ok: false, error: errorText });
   }
 
   const application = {
@@ -2390,6 +2397,7 @@ app.post('/api/unban/bot/ban-cache', requireBot, (req, res) => {
   data.users[userId] = {
     discord: req.body.discord || { checked: true, banned: false, reason: 'Kein Discord-Ban gefunden.', duration: 'Nicht gebannt', until: null },
     global: req.body.global || { checked: true, banned: false, reason: 'Kein Blue Security Global-Ban gefunden.', duration: 'Nicht gebannt', until: null },
+    globalchat: req.body.globalchat || { checked: true, banned: false, reason: 'Kein Globalchat-Ban gefunden.', duration: 'Nicht gebannt', until: null },
     updatedAt: new Date().toISOString()
   };
   saveBanCache(data);
