@@ -2500,3 +2500,103 @@ img,video,canvas{max-width:100%}
     grid-template-columns: 1fr !important;
   }
 }
+
+/* Web Ticket mobile readability fix: keep the live chat and messages visible on phones. */
+.ticket-layout,
+.ticket-sidebar,
+.ticket-chat-panel,
+.ticket-chat,
+.ticket-messages,
+.ticket-message {
+  min-width: 0;
+}
+.ticket-message p,
+.ticket-message-author,
+.ticket-attachment {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.ticket-attachments {
+  max-width: 100%;
+}
+
+@media (max-width: 760px) {
+  .ticket-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .ticket-layout.ticket-active .ticket-chat-panel {
+    order: -1;
+  }
+
+  .ticket-sidebar,
+  .ticket-chat-panel {
+    overflow: visible;
+    width: 100%;
+  }
+
+  .ticket-chat-panel {
+    min-height: auto;
+  }
+
+  .ticket-chat {
+    min-height: auto;
+    height: auto;
+  }
+
+  .ticket-chat-header {
+    padding: 18px;
+    gap: 10px;
+  }
+
+  .ticket-chat-header h2 {
+    font-size: 1.25rem;
+    word-break: break-word;
+  }
+
+  .ticket-messages {
+    flex: initial;
+    min-height: 280px;
+    max-height: min(62vh, 620px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .ticket-message {
+    max-width: 100%;
+    width: 100%;
+    padding: 12px 13px;
+    border-radius: 18px;
+  }
+
+  .ticket-message.user,
+  .ticket-message.staff,
+  .ticket-message.system {
+    align-self: stretch;
+  }
+
+  .ticket-message-head {
+    align-items: flex-start;
+  }
+
+  .ticket-message-form {
+    padding: 14px;
+  }
+
+  .ticket-message-form textarea {
+    min-height: 84px;
+  }
+
+  .ticket-upload-row {
+    gap: 10px;
+  }
+
+  .file-drop input {
+    max-width: 100%;
+    width: 100%;
+  }
+}

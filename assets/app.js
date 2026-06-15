@@ -612,6 +612,7 @@ async function initTicketPage() {
   let selectedCategory = null;
   let activeTicketId = null;
   let loggedIn = false;
+  let pendingTicketScroll = false;
   let ticketAccess = { ready: false, hasPremium: false };
 
   function showTicketMessage(text, type = 'info') {
@@ -679,8 +680,9 @@ async function initTicketPage() {
     else clearTicketMessage();
   }
 
-  function openTicket(ticket) {
+  function openTicket(ticket, options = {}) {
     activeTicketId = ticket.id;
+    root.classList.add('ticket-active');
     if (empty) empty.hidden = true;
     if (chat) chat.hidden = false;
     if (chatTitle) chatTitle.textContent = `#${ticket.channelName || ticket.id}`;
@@ -701,6 +703,14 @@ async function initTicketPage() {
       messagesBox.scrollTop = messagesBox.scrollHeight;
     }
     $$('.ticket-list-item').forEach((node) => node.classList.toggle('active', node.dataset.ticketId === ticket.id));
+
+    const shouldScrollToChat = Boolean(options.scroll || pendingTicketScroll);
+    pendingTicketScroll = false;
+    if (shouldScrollToChat && chat && window.matchMedia('(max-width: 760px)').matches) {
+      window.setTimeout(() => {
+        chat.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 80);
+    }
   }
 
   function renderTicketList(tickets) {
@@ -713,7 +723,7 @@ async function initTicketPage() {
     $$('[data-ticket-id]', ticketList).forEach((button) => {
       button.addEventListener('click', () => {
         const ticket = tickets.find((item) => item.id === button.dataset.ticketId);
-        if (ticket) openTicket(ticket);
+        if (ticket) openTicket(ticket, { scroll: true });
       });
     });
   }
@@ -771,6 +781,7 @@ async function initTicketPage() {
     createForm.reset();
     createForm.hidden = true;
     activeTicketId = result.ticket?.id || null;
+    pendingTicketScroll = true;
     showTicketMessage('Dein Ticket wurde erstellt. Der Bot legt gerade den Discord-Kanal an.', 'success');
     await loadTickets(true);
   });
