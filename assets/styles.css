@@ -2527,6 +2527,7 @@ img,video,canvas{max-width:100%}
     gap: 18px;
   }
 
+  .ticket-page.ticket-active .ticket-chat-panel,
   .ticket-layout.ticket-active .ticket-chat-panel {
     order: -1;
   }
@@ -2599,4 +2600,24 @@ img,video,canvas{max-width:100%}
     max-width: 100%;
     width: 100%;
   }
+}
+
+
+/* Web Ticket: keep mobile ticket chat readable without hiding created tickets. */
+.ticket-page.ticket-active [data-ticket-chat] {
+  display: flex;
+}
+.ticket-page.ticket-active [data-ticket-empty] {
+  display: none !important;
+}
+.ticket-message time {
+  color: var(--muted);
+  font-size: .78rem;
+}
+.ticket-attachment img {
+  display: block;
+  max-width: 100%;
+  max-height: 260px;
+  border-radius: 14px;
+  margin-bottom: 8px;
 }

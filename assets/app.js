@@ -615,15 +615,89 @@ async function initTicketPage() {
   let pendingTicketScroll = false;
   let ticketAccess = { ready: false, hasPremium: false };
 
-  function showTicketMessage(text, type = 'info') {
+  function ticketTypeLabel(type) {
+    return type === 'head' ? 'Leitung' : 'Allgemeiner Support';
+  }
+
+  function ticketStatusLabel(status) {
+    const value = String(status || '').toLowerCase();
+    if (value === 'pending_channel') return 'Wird erstellt';
+    if (value === 'open') return 'Offen';
+    if (value === 'closed') return 'Geschlossen';
+    return value ? value.replace(/_/g, ' ') : 'Unbekannt';
+  }
+
+  function formatTicketDate(value) {
+    const date = value ? new Date(value) : new Date();
+    if (Number.isNaN(date.getTime())) return 'Gerade eben';
+    return date.toLocaleString('de-DE');
+  }
+
+  function renderTicketAttachment(attachment) {
+    const url = attachment?.url || '#';
+    const name = attachment?.originalName || attachment?.fileName || 'Datei';
+    const mime = String(attachment?.mimeType || '');
+    const isImage = mime.startsWith('image/') || /\.(png|jpe?g|gif|webp)$/i.test(String(url));
+    return `
+      <a class="ticket-attachment" href="${escapeHtml(url)}" target="_blank" rel="noopener">
+        ${isImage ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(name)}" loading="lazy">` : ''}
+        <span>📎 ${escapeHtml(name)}</span>
+      </a>
+    `;
+  }
+
+  function renderTicketMessage(message) {
+    const type = String(message?.authorType || 'system').toLowerCase();
+    const author = message?.author || {};
+    const authorName = type === 'staff'
+      ? (author.name || author.username || 'Blue Team')
+      : type === 'user'
+        ? (author.global_name || author.username || 'Du')
+        : 'Blue System';
+    const text = String(message?.text || '').trim();
+    const attachments = Array.isArray(message?.attachments) ? message.attachments : [];
+    return `
+      <article class="ticket-message ${escapeHtml(type)}">
+        <div class="ticket-message-head">
+          <strong class="ticket-message-author">${escapeHtml(authorName)}</strong>
+          <time>${escapeHtml(formatTicketDate(message?.createdAt))}</time>
+        </div>
+        ${text ? `<p>${escapeHtml(text).replace(/\n/g, '<br>')}</p>` : ''}
+        ${attachments.length ? `<div class="ticket-attachments">${attachments.map(renderTicketAttachment).join('')}</div>` : ''}
+      </article>
+    `;
+  }
+
+  function normalizeTicket(ticket) {
+    if (!ticket || typeof ticket !== 'object') return null;
+    return {
+      id: ticket.id || `local_${Date.now()}`,
+      type: ticket.type || 'general',
+      status: ticket.status || 'pending_channel',
+      channelName: ticket.channelName || ticket.channelId || ticket.id || 'wird-erstellt',
+      createdAt: ticket.createdAt || new Date().toISOString(),
+      deleteAt: ticket.deleteAt || null,
+      messages: Array.isArray(ticket.messages) ? ticket.messages : []
+    };
+  }
+
+  function showTicketMessage(text, type = 'info', sticky = false) {
     if (!messageBox) return;
     messageBox.hidden = false;
     messageBox.className = `notice-card ${type}`;
     messageBox.textContent = text;
+    messageBox.dataset.stickyTicketNotice = sticky ? '1' : '0';
   }
 
   function clearTicketMessage() {
-    if (messageBox) messageBox.hidden = true;
+    if (!messageBox || messageBox.dataset.stickyTicketNotice === '1') return;
+    messageBox.hidden = true;
+  }
+
+  function clearStickyTicketMessage() {
+    if (!messageBox) return;
+    messageBox.dataset.stickyTicketNotice = '0';
+    messageBox.hidden = true;
   }
 
   function setTicketButtonState(button, text, disabled) {
@@ -681,16 +755,19 @@ async function initTicketPage() {
   }
 
   function openTicket(ticket, options = {}) {
+    ticket = normalizeTicket(ticket);
+    if (!ticket) return;
     activeTicketId = ticket.id;
     root.classList.add('ticket-active');
+    $('.ticket-layout')?.classList.add('ticket-active');
     if (empty) empty.hidden = true;
     if (chat) chat.hidden = false;
     if (chatTitle) chatTitle.textContent = `#${ticket.channelName || ticket.id}`;
     if (chatType) chatType.textContent = ticketTypeLabel(ticket.type);
     if (chatStatus) {
-      const base = `${ticketStatusLabel(ticket.status)} · erstellt am ${new Date(ticket.createdAt).toLocaleString('de-DE')}`;
+      const base = `${ticketStatusLabel(ticket.status)} · erstellt am ${formatTicketDate(ticket.createdAt)}`;
       chatStatus.textContent = ticket.status === 'closed' && ticket.deleteAt
-        ? `${base} · wird gelöscht am ${new Date(ticket.deleteAt).toLocaleString('de-DE')}`
+        ? `${base} · wird gelöscht am ${formatTicketDate(ticket.deleteAt)}`
         : base;
     }
     if (ticketState) {
@@ -717,9 +794,11 @@ async function initTicketPage() {
     if (!ticketList) return;
     if (!tickets.length) {
       ticketList.innerHTML = '<p class="muted">Du hast aktuell kein Ticket.</p>';
+      root.classList.remove('ticket-active');
+      $('.ticket-layout')?.classList.remove('ticket-active');
       return;
     }
-    ticketList.innerHTML = tickets.map((ticket) => `<button class="ticket-list-item" type="button" data-ticket-id="${escapeHtml(ticket.id)}"><strong>${escapeHtml(ticketTypeLabel(ticket.type))}</strong><small>${escapeHtml(ticketStatusLabel(ticket.status))} · ${escapeHtml(new Date(ticket.createdAt).toLocaleString('de-DE'))}</small></button>`).join('');
+    ticketList.innerHTML = tickets.map((ticket) => `<button class="ticket-list-item" type="button" data-ticket-id="${escapeHtml(ticket.id)}"><strong>${escapeHtml(ticketTypeLabel(ticket.type))}</strong><small>${escapeHtml(ticketStatusLabel(ticket.status))} · ${escapeHtml(formatTicketDate(ticket.createdAt))}</small></button>`).join('');
     $$('[data-ticket-id]', ticketList).forEach((button) => {
       button.addEventListener('click', () => {
         const ticket = tickets.find((item) => item.id === button.dataset.ticketId);
@@ -740,7 +819,7 @@ async function initTicketPage() {
     const data = await ticketResponse.json();
     ticketAccess = data.ticketAccess || { ready: false, hasPremium: false };
     setUnlockedState();
-    const tickets = Array.isArray(data.tickets) ? data.tickets : [];
+    const tickets = (Array.isArray(data.tickets) ? data.tickets : []).map(normalizeTicket).filter(Boolean);
     renderTicketList(tickets);
     let ticket = keepActive && activeTicketId ? tickets.find((item) => item.id === activeTicketId) : null;
     if (!ticket && tickets.length) ticket = tickets[0];
@@ -752,6 +831,7 @@ async function initTicketPage() {
       if (!loggedIn) return showTicketMessage('Bitte melde dich oben rechts mit Discord an.', 'warn');
       if (!ticketAccess.ready) return showTicketMessage(ticketAccess.message || 'Premium-Rolle wird noch geprüft.', 'warn');
       if (!ticketAccess.hasPremium) return showTicketMessage(ticketAccess.message || 'Blue Premium benötigt: Blue Premium benötigt: Blue Premium benötigt: Du brauchst die Premium-Rolle, um Tickets zu öffnen.', 'error');
+      clearStickyTicketMessage();
       selectedCategory = button.dataset.openTicketForm;
       if (createForm) createForm.hidden = false;
       $('[data-ticket-form-type]').textContent = selectedCategory === 'head' ? 'Leitung kontaktieren' : 'Allgemeiner Support';
@@ -761,6 +841,7 @@ async function initTicketPage() {
   });
 
   $('[data-ticket-form-cancel]')?.addEventListener('click', () => {
+    clearStickyTicketMessage();
     if (createForm) createForm.hidden = true;
     selectedCategory = null;
   });
@@ -780,9 +861,14 @@ async function initTicketPage() {
     if (!response.ok || !result.ok) return showTicketMessage(result.error || 'Ticket konnte nicht erstellt werden.', response.status === 409 ? 'warn' : 'error');
     createForm.reset();
     createForm.hidden = true;
-    activeTicketId = result.ticket?.id || null;
+    const createdTicket = normalizeTicket(result.ticket);
+    activeTicketId = createdTicket?.id || null;
     pendingTicketScroll = true;
-    showTicketMessage('Dein Ticket wurde erstellt. Der Bot legt gerade den Discord-Kanal an.', 'success');
+    showTicketMessage('Dein Ticket wurde erstellt. Der Bot legt gerade den Discord-Kanal an.', 'success', true);
+    if (createdTicket) {
+      renderTicketList([createdTicket]);
+      openTicket(createdTicket, { scroll: true });
+    }
     await loadTickets(true);
   });
 
@@ -796,6 +882,7 @@ async function initTicketPage() {
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok || !result.ok) return showTicketMessage(result.error || 'Nachricht konnte nicht gesendet werden.', 'error');
+    clearStickyTicketMessage();
     messageForm.reset();
     await loadTickets(true);
   });
