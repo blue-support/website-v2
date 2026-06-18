@@ -48,6 +48,13 @@ const TICKET_ELIGIBILITY_LOOKUP_FILE = path.join(DATA_DIR, 'ticket-eligibility-r
 const TICKET_DELETE_AFTER_DAYS = Number(process.env.TICKET_DELETE_AFTER_DAYS || 30);
 const TICKET_UPLOAD_DIR = path.join(DATA_DIR, 'ticket-uploads');
 
+const TESTER_API_SECRET = process.env.TESTER_API_SECRET || process.env.TESTER_BOT_SECRET || TICKET_API_SECRET || UNBAN_API_SECRET || HEARTBEAT_SECRET || '';
+const TESTER_ACCESS_FILE = path.join(DATA_DIR, 'tester-access-cache.json');
+const TESTER_ACCESS_LOOKUP_FILE = path.join(DATA_DIR, 'tester-access-requests.json');
+const TESTER_REPORTS_FILE = path.join(DATA_DIR, 'tester-reports.json');
+const TESTER_UPLOAD_DIR = path.join(DATA_DIR, 'tester-uploads');
+const TESTER_ACCESS_CACHE_MS = Number(process.env.TESTER_ACCESS_CACHE_MS || (1000 * 60 * 5));
+
 const DASHBOARD_API_SECRET = process.env.DASHBOARD_API_SECRET || TICKET_API_SECRET || UNBAN_API_SECRET || HEARTBEAT_SECRET || '';
 const DASHBOARD_GUILDS_FILE = path.join(DATA_DIR, 'dashboard-guilds.json');
 const DASHBOARD_ACCESS_FILE = path.join(DATA_DIR, 'dashboard-access-cache.json');
@@ -69,6 +76,7 @@ const DASHBOARD_COMMUNITY_ACTION_FILE = path.join(DATA_DIR, 'dashboard-community
 const DASHBOARD_SECURITY_CONFIG_FILE = path.join(DATA_DIR, 'dashboard-security-configs.json');
 const DASHBOARD_SECURITY_ACTION_FILE = path.join(DATA_DIR, 'dashboard-security-actions.json');
 fs.mkdirSync(TICKET_UPLOAD_DIR, { recursive: true });
+fs.mkdirSync(TESTER_UPLOAD_DIR, { recursive: true });
 
 const ticketUploadStorage = multer.diskStorage({
   destination(_req, _file, cb) {
@@ -82,6 +90,25 @@ const ticketUploadStorage = multer.diskStorage({
 const ticketUpload = multer({
   storage: ticketUploadStorage,
   limits: { fileSize: 10 * 1024 * 1024, files: 5 }
+});
+
+const testerUploadStorage = multer.diskStorage({
+  destination(_req, _file, cb) {
+    cb(null, TESTER_UPLOAD_DIR);
+  },
+  filename(_req, file, cb) {
+    const ext = path.extname(file.originalname || '').slice(0, 16).replace(/[^a-zA-Z0-9.]/g, '') || '.bin';
+    cb(null, `${Date.now()}-${crypto.randomUUID()}${ext}`);
+  }
+});
+const testerUpload = multer({
+  storage: testerUploadStorage,
+  limits: { fileSize: 8 * 1024 * 1024, files: 3 },
+  fileFilter(_req, file, cb) {
+    const mime = String(file.mimetype || '');
+    if (!mime.startsWith('image/')) return cb(new Error('Nur Bilder sind erlaubt.'));
+    cb(null, true);
+  }
 });
 
 let lastHeartbeat = loadHeartbeatFromDisk();
@@ -180,6 +207,11 @@ app.use('/ticket-uploads', express.static(TICKET_UPLOAD_DIR, {
     res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
   }
 }));
+app.use('/tester-uploads', express.static(TESTER_UPLOAD_DIR, {
+  setHeaders(res) {
+    res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+  }
+}));
 
 app.use(express.static(__dirname, {
   extensions: ['html'],
@@ -194,6 +226,16 @@ app.get('/', (_req, res) => {
 
 app.get('/updates', (_req, res) => {
   res.sendFile(path.join(__dirname, 'updates.html'));
+});
+
+app.get('/tester', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.sendFile(path.join(__dirname, 'tester.html'));
+});
+
+app.get('/tester-dash', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.sendFile(path.join(__dirname, 'tester.html'));
 });
 
 // Eigene Dashboard-Serverseiten: /dashboard/123456789 oder /dashboard.123456789
@@ -467,6 +509,12 @@ function requireTicketBot(req, res, next) {
 function requireDashboardBot(req, res, next) {
   if (!DASHBOARD_API_SECRET) return res.status(500).json({ ok: false, error: 'DASHBOARD_API_SECRET, TICKET_API_SECRET oder BOT_HEARTBEAT_SECRET fehlt im Website-Service.' });
   if (readSecret(req, 'x-blue-dashboard-secret') !== DASHBOARD_API_SECRET) return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  return next();
+}
+
+function requireTesterBot(req, res, next) {
+  if (!TESTER_API_SECRET) return res.status(500).json({ ok: false, error: 'TESTER_API_SECRET, TICKET_API_SECRET oder BOT_HEARTBEAT_SECRET fehlt im Website-Service.' });
+  if (readSecret(req, 'x-blue-tester-secret') !== TESTER_API_SECRET) return res.status(401).json({ ok: false, error: 'Unauthorized' });
   return next();
 }
 
@@ -2553,6 +2601,262 @@ app.post('/api/unban/bot/status', requireBot, (req, res) => {
 
 
 // ------------------------------------------------------------
+// Blue Tester Dash / Bug Report API
+// ------------------------------------------------------------
+function loadTesterAccess() {
+  const data = loadJson(TESTER_ACCESS_FILE, { users: {} });
+  if (!data.users || typeof data.users !== 'object') data.users = {};
+  return data;
+}
+
+function saveTesterAccess(data) {
+  if (!data.users || typeof data.users !== 'object') data.users = {};
+  saveJson(TESTER_ACCESS_FILE, data);
+}
+
+function loadTesterAccessRequests() {
+  const data = loadJson(TESTER_ACCESS_LOOKUP_FILE, { requests: {} });
+  if (!data.requests || typeof data.requests !== 'object') data.requests = {};
+  return data;
+}
+
+function saveTesterAccessRequests(data) {
+  if (!data.requests || typeof data.requests !== 'object') data.requests = {};
+  saveJson(TESTER_ACCESS_LOOKUP_FILE, data);
+}
+
+function loadTesterReports() {
+  const data = loadJson(TESTER_REPORTS_FILE, { reports: [] });
+  if (!Array.isArray(data.reports)) data.reports = [];
+  return data;
+}
+
+function saveTesterReports(data) {
+  if (!Array.isArray(data.reports)) data.reports = [];
+  saveJson(TESTER_REPORTS_FILE, data);
+}
+
+function queueTesterAccessLookup(user) {
+  if (!user?.id) return;
+  const data = loadTesterAccessRequests();
+  data.requests[String(user.id)] = {
+    user,
+    requestedAt: new Date().toISOString(),
+    requestedAtMs: Date.now()
+  };
+  saveTesterAccessRequests(data);
+}
+
+function getTesterAccessForUser(user) {
+  if (!user?.id) return { ready: false, isTester: false, checking: false, message: 'Bitte melde dich mit Discord an.' };
+  const cache = loadTesterAccess();
+  const entry = cache.users[String(user.id)];
+  const fresh = entry && Number(entry.checkedAtMs || 0) && Date.now() - Number(entry.checkedAtMs || 0) <= TESTER_ACCESS_CACHE_MS;
+  if (fresh) {
+    return {
+      ready: true,
+      isTester: Boolean(entry.isTester),
+      memberFound: Boolean(entry.memberFound),
+      checkedAt: entry.checkedAt || null,
+      checking: false,
+      message: entry.isTester ? 'Tester-Zugriff bestätigt.' : 'Du hast aktuell keinen Tester-Zugriff.'
+    };
+  }
+  queueTesterAccessLookup(user);
+  return {
+    ready: false,
+    isTester: Boolean(entry?.isTester),
+    memberFound: Boolean(entry?.memberFound),
+    checkedAt: entry?.checkedAt || null,
+    checking: true,
+    message: 'Tester-Rolle wird gerade vom Bot geprüft. Bitte lade die Seite gleich neu.'
+  };
+}
+
+function requireTesterUser(req, res, next) {
+  const access = getTesterAccessForUser(req.session.discordUser);
+  if (!access.ready || !access.isTester) {
+    return res.status(403).json({ ok: false, error: access.message || 'Kein Tester-Zugriff.', testerAccess: access });
+  }
+  return next();
+}
+
+function testerReportStatusLabel(status) {
+  const map = {
+    pending: 'Offen',
+    in_review: 'In Bearbeitung',
+    fixed: 'Bug wurde gefixt',
+    rejected: 'Bug Report Abgelehnt'
+  };
+  return map[status] || status || 'Unbekannt';
+}
+
+function publicTesterReport(report) {
+  return {
+    id: report.id,
+    title: report.title,
+    description: report.description,
+    category: report.category,
+    page: report.page,
+    bugType: report.bugType,
+    images: Array.isArray(report.images) ? report.images : [],
+    status: report.status,
+    statusLabel: testerReportStatusLabel(report.status),
+    createdAt: report.createdAt,
+    handledAt: report.handledAt || null,
+    handledBy: report.handledBy || null,
+    decisionReason: report.decisionReason || null,
+    discordChannelId: report.discordChannelId || null,
+    discordMessageId: report.discordMessageId || null
+  };
+}
+
+function mapTesterImages(req, files) {
+  return (files || []).slice(0, 3).map((file) => ({
+    id: `tester_img_${crypto.randomUUID().slice(0, 10)}`,
+    originalName: sanitizeText(file.originalname || 'Bild', 160),
+    fileName: file.filename,
+    mimeType: file.mimetype || 'application/octet-stream',
+    size: file.size || 0,
+    url: `${publicBaseUrl(req)}/tester-uploads/${encodeURIComponent(file.filename)}`
+  }));
+}
+
+function findTesterReport(data, reportId) {
+  return data.reports.find((report) => report.id === reportId);
+}
+
+app.get('/api/tester/me', requireUser, (req, res) => {
+  const testerAccess = getTesterAccessForUser(req.session.discordUser);
+  const data = loadTesterReports();
+  const reports = data.reports
+    .filter((report) => report.user?.id === req.session.discordUser.id)
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+    .map(publicTesterReport);
+  res.json({ ok: true, user: req.session.discordUser, testerAccess, reports });
+});
+
+app.post('/api/tester/reports', requireUser, requireTesterUser, testerUpload.array('images', 3), (req, res) => {
+  const title = sanitizeText(req.body.title, 160);
+  const description = sanitizeText(req.body.description, 2500);
+  const category = sanitizeText(req.body.category, 80);
+  const page = sanitizeText(req.body.page, 120);
+  const bugType = sanitizeText(req.body.bugType, 80);
+
+  if (!title || !description || !category || !page || !bugType) {
+    return res.status(400).json({ ok: false, error: 'Bitte fülle Titel, Beschreibung, Kategorie, Seite und Bug-Art aus.' });
+  }
+
+  const allowedBugTypes = new Set(['Text', 'Code Fehler', 'Design Fehler', 'Funktion Fehler', 'Sonstiges']);
+  const normalizedBugType = allowedBugTypes.has(bugType) ? bugType : 'Sonstiges';
+
+  const data = loadTesterReports();
+  const report = {
+    id: `bug_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
+    user: req.session.discordUser,
+    title,
+    description,
+    category,
+    page,
+    bugType: normalizedBugType,
+    images: mapTesterImages(req, req.files),
+    status: 'pending',
+    sentToDiscord: false,
+    createdAt: new Date().toISOString(),
+    handledAt: null,
+    handledBy: null,
+    decisionReason: null,
+    discordChannelId: null,
+    discordMessageId: null
+  };
+
+  data.reports.push(report);
+  saveTesterReports(data);
+  res.json({ ok: true, report: publicTesterReport(report) });
+});
+
+app.get('/api/tester/bot/access-requests', requireTesterBot, (_req, res) => {
+  const data = loadTesterAccessRequests();
+  const now = Date.now();
+  const requests = Object.values(data.requests || {})
+    .filter((item) => item?.user?.id && now - Number(item.requestedAtMs || Date.parse(item.requestedAt || 0) || 0) < 1000 * 60 * 30)
+    .sort((a, b) => Number(a.requestedAtMs || 0) - Number(b.requestedAtMs || 0))
+    .slice(0, 100);
+  res.json({ ok: true, requests });
+});
+
+app.post('/api/tester/bot/access-status', requireTesterBot, (req, res) => {
+  const userId = String(req.body?.userId || '').replace(/\D/g, '');
+  if (!userId) return res.status(400).json({ ok: false, error: 'userId fehlt.' });
+  const access = loadTesterAccess();
+  access.users[userId] = {
+    userId,
+    isTester: Boolean(req.body.isTester),
+    memberFound: Boolean(req.body.memberFound),
+    rolesChecked: Boolean(req.body.rolesChecked),
+    checkedAt: new Date().toISOString(),
+    checkedAtMs: Date.now()
+  };
+  saveTesterAccess(access);
+
+  const requests = loadTesterAccessRequests();
+  delete requests.requests[userId];
+  saveTesterAccessRequests(requests);
+  res.json({ ok: true });
+});
+
+app.get('/api/tester/bot/pending-reports', requireTesterBot, (_req, res) => {
+  const data = loadTesterReports();
+  const reports = data.reports
+    .filter((report) => report.status === 'pending' && !report.sentToDiscord)
+    .slice(0, 25);
+  res.json({ ok: true, reports });
+});
+
+app.post('/api/tester/bot/report-sent', requireTesterBot, (req, res) => {
+  const id = String(req.body?.id || '');
+  const data = loadTesterReports();
+  const report = findTesterReport(data, id);
+  if (!report) return res.status(404).json({ ok: false, error: 'Report nicht gefunden.' });
+  report.sentToDiscord = true;
+  report.status = 'in_review';
+  report.discordChannelId = String(req.body.channelId || '');
+  report.discordMessageId = String(req.body.messageId || '');
+  report.sentAt = new Date().toISOString();
+  saveTesterReports(data);
+  res.json({ ok: true });
+});
+
+app.post('/api/tester/bot/report-status', requireTesterBot, (req, res) => {
+  const id = String(req.body?.id || '');
+  const status = String(req.body?.status || '');
+  if (!['fixed', 'rejected'].includes(status)) return res.status(400).json({ ok: false, error: 'Ungültiger Status.' });
+  const data = loadTesterReports();
+  const report = findTesterReport(data, id);
+  if (!report) return res.status(404).json({ ok: false, error: 'Report nicht gefunden.' });
+  report.status = status;
+  report.handledAt = new Date().toISOString();
+  report.handledBy = req.body.handledBy || null;
+  report.decisionReason = sanitizeText(req.body.reason, 1200) || null;
+  report.closedChannelId = String(req.body.channelId || report.discordChannelId || '');
+  saveTesterReports(data);
+  res.json({ ok: true, report: publicTesterReport(report) });
+});
+
+app.get('/api/tester/bot/user-reports/:userId', requireTesterBot, (req, res) => {
+  const userId = String(req.params.userId || '').replace(/\D/g, '');
+  if (!userId) return res.status(400).json({ ok: false, error: 'User ID fehlt.' });
+  const data = loadTesterReports();
+  const reports = data.reports
+    .filter((report) => String(report.user?.id || '') === userId)
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+    .map(publicTesterReport);
+  const access = loadTesterAccess().users[userId] || null;
+  res.json({ ok: true, userId, isTester: Boolean(access?.isTester), reports });
+});
+
+
+// ------------------------------------------------------------
 // Blue Website Ticket Support API
 // ------------------------------------------------------------
 function loadTickets() {
@@ -2934,4 +3238,5 @@ app.listen(port, () => {
   if (!DISCORD_CLIENT_SECRET) console.warn('DISCORD_CLIENT_SECRET fehlt. Discord Login für Unban-Anträge ist deaktiviert.');
   if (!UNBAN_API_SECRET) console.warn('UNBAN_API_SECRET/BOT_HEARTBEAT_SECRET fehlt. Bot kann Unban-Anträge nicht abrufen.');
   if (!TICKET_API_SECRET) console.warn('TICKET_API_SECRET/UNBAN_API_SECRET/BOT_HEARTBEAT_SECRET fehlt. Bot kann Website-Tickets nicht abrufen.');
+  if (!TESTER_API_SECRET) console.warn('TESTER_API_SECRET/TICKET_API_SECRET/BOT_HEARTBEAT_SECRET fehlt. Bot kann Tester-Dash nicht synchronisieren.');
 });

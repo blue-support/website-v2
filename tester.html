@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Blue ⚡ Tester Dash - Regeln, Testing Guide und Bug-Reports für Tester.">
+  <title>Tester Dash · Blue ⚡</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  <canvas id="fx-canvas" aria-hidden="true"></canvas>
+  <div class="bg-orb orb-one"></div>
+  <div class="bg-orb orb-two"></div>
+
+  <header class="site-header" data-header>
+    <a class="brand" href="/index.html" aria-label="Blue Startseite"><span class="brand-mark">⚡</span><span class="brand-text">Blue</span></a>
+    <button class="nav-toggle" type="button" aria-label="Menü öffnen" aria-expanded="false" data-nav-toggle><span></span><span></span><span></span></button>
+    <nav class="nav" data-nav>
+      <a href="/index.html">Home</a>
+      <a href="/index.html#features">Features</a>
+      <a href="/dashboard">Dashboard</a>
+      <a class="active" href="/tester.html">Tester Dash</a>
+      <a href="/updates.html">Updates</a>
+      <a href="/status.html">Bot Status</a>
+      <a href="/ticket.html">Ticket Support</a>
+      <a href="/unban.html">Unban Antrag</a>
+      <a href="/tos.html">TOS</a>
+      <a href="/privacy.html">Privacy</a>
+      <a href="/impressum.html">Impressum</a>
+      <a href="https://discord.com/oauth2/authorize?client_id=1321889022380871681&permissions=8&integration_type=0&scope=bot" target="_blank" rel="noopener">Bot Einladen</a>
+      <a class="nav-cta" href="https://dsc.blue-lol.de" target="_blank" rel="noopener">Support</a>
+    </nav>
+    <div class="nav-auth" data-global-auth data-auth-return="/tester.html"><a class="nav-login" href="/auth/discord?return=/tester.html">Discord Login</a></div>
+  </header>
+
+  <main data-tester-page>
+    <section class="page-hero compact">
+      <div class="wrapper">
+        <span class="eyebrow">Tester Team</span>
+        <h1>Tester Dash</h1>
+        <p>Interner Bereich für Blue Tester. Hier findest du Regeln, Testing-Hinweise und kannst Bugs direkt mit Bildern melden.</p>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="wrapper">
+        <div class="notice-card" data-tester-message hidden></div>
+
+        <div class="glass-panel tester-locked" data-tester-locked hidden>
+          <span class="choice-icon">🔐</span>
+          <h2>Tester-Zugriff erforderlich</h2>
+          <p>Diese Seite wird nur angezeigt, wenn du auf dem Main-Discord die Rolle <strong>TESTER_ROLE_ID</strong> besitzt. Nach dem Login prüft der Bot deine Rolle automatisch.</p>
+          <a class="btn primary" href="/auth/discord?return=/tester.html">Mit Discord einloggen</a>
+        </div>
+
+        <div class="tester-shell" data-tester-shell hidden>
+          <div class="tester-grid">
+            <article class="glass-panel tester-card reveal">
+              <span class="eyebrow">Regeln</span>
+              <h2>Tester-Regeln</h2>
+              <ul class="tester-list">
+                <li>Keine unveröffentlichten Features, Screenshots oder Informationen leaken.</li>
+                <li>Keine Test-Funktionen an normale User weitergeben oder öffentlich zeigen.</li>
+                <li>Bugs ehrlich und nachvollziehbar melden, auch wenn sie klein wirken.</li>
+                <li>Keine absichtliche Ausnutzung von Fehlern außerhalb des Tests.</li>
+                <li>Bei kritischen Bugs sofort melden und nicht weiter verbreiten.</li>
+              </ul>
+            </article>
+
+            <article class="glass-panel tester-card reveal">
+              <span class="eyebrow">Testing Guide</span>
+              <h2>So testest du richtig</h2>
+              <ul class="tester-list">
+                <li>Teste einen Bereich nach dem anderen: Website, Dashboard, Bot-Commands, Tickets, Unban.</li>
+                <li>Beschreibe genaue Schritte: Was hast du angeklickt? Was sollte passieren? Was ist passiert?</li>
+                <li>Teste auch mobil, dunkle/helle Browser, Reloads und ungültige Eingaben.</li>
+                <li>Bei Bot-Fehlern immer Command, Server, Kanal und ungefähre Uhrzeit dazuschreiben.</li>
+                <li>Bei Website-Fehlern die betroffene Seite und Browser-Konsole erwähnen, falls möglich.</li>
+              </ul>
+            </article>
+          </div>
+
+          <div class="tester-report-layout">
+            <form class="glass-panel tester-report-form reveal" data-tester-report-form enctype="multipart/form-data">
+              <span class="eyebrow">Bug melden</span>
+              <h2>Bug-Report</h2>
+              <p>Melde Fehler so genau wie möglich. Der Bot erstellt danach automatisch einen privaten Bug-Kanal für dich und CEO.</p>
+
+              <label>Titel
+                <input name="title" required maxlength="160" placeholder="Kurzer Titel des Bugs">
+              </label>
+
+              <label>Beschreibung des Bugs
+                <textarea name="description" required maxlength="2500" placeholder="Was ist passiert? Wie kann man den Fehler reproduzieren?"></textarea>
+              </label>
+
+              <div class="form-grid two">
+                <label>Kategorie
+                  <select name="category" required>
+                    <option value="Website">Website</option>
+                    <option value="Bot">Bot</option>
+                    <option value="Dashboard">Dashboard</option>
+                    <option value="Ticket System">Ticket System</option>
+                    <option value="Unban System">Unban System</option>
+                    <option value="Sonstiges">Sonstiges</option>
+                  </select>
+                </label>
+
+                <label>Welche Seite?
+                  <input name="page" required maxlength="120" placeholder="z. B. /dashboard, /ticket.html oder Bot-Command">
+                </label>
+              </div>
+
+              <label>Was für ein Bug?
+                <select name="bugType" required>
+                  <option value="Text">Text</option>
+                  <option value="Code Fehler">Code Fehler</option>
+                  <option value="Design Fehler">Design Fehler</option>
+                  <option value="Funktion Fehler">Funktion Fehler</option>
+                  <option value="Sonstiges">Sonstiges</option>
+                </select>
+              </label>
+
+              <label class="file-drop tester-file-drop">🖼️ Bilder anhängen
+                <input name="images" type="file" accept="image/*" multiple data-tester-images>
+              </label>
+              <small data-tester-image-hint>0 / 3 Bilder ausgewählt</small>
+
+              <div class="form-actions">
+                <button class="btn primary" type="submit">Bug-Report senden</button>
+              </div>
+            </form>
+
+            <aside class="glass-panel tester-history reveal">
+              <span class="eyebrow">Report Verlauf</span>
+              <h2>Deine Meldungen</h2>
+              <div data-tester-history><p class="muted">Reports werden geladen...</p></div>
+            </aside>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrapper footer-grid">
+      <div><a class="brand" href="/index.html"><span class="brand-mark">⚡</span><span class="brand-text">Blue</span></a><p>Der All-in-One Discord Bot für Community Server.</p></div>
+      <div class="footer-links"><strong>Website</strong><a href="/index.html">Home</a><a href="/status.html">Bot Status</a><a href="/updates.html">Updates</a><a href="/ticket.html">Ticket Support</a><a href="/unban.html">Unban Antrag</a></div>
+      <div class="footer-links"><strong>Legal</strong><a href="/impressum.html">Impressum</a><a href="/tos.html">Terms of Service</a><a href="/privacy.html">Privacy</a></div>
+      <div class="footer-links"><strong>Action</strong><a href="https://discord.com/oauth2/authorize?client_id=1321889022380871681&permissions=8&integration_type=0&scope=bot" target="_blank" rel="noopener">Bot Einladen</a><a href="https://dsc.blue-lol.de" target="_blank" rel="noopener">Discord öffnen</a></div>
+    </div>
+    <div class="wrapper copyright"><span>© 2026 Alle Rechte vorbehalten</span><span>Blue ⚡ Community Bot</span></div>
+  </footer>
+  <script src="/assets/app.js"></script>
+</body>
+</html>
