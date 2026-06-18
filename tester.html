@@ -31,7 +31,7 @@
       <a href="https://discord.com/oauth2/authorize?client_id=1321889022380871681&permissions=8&integration_type=0&scope=bot" target="_blank" rel="noopener">Bot Einladen</a>
       <a class="nav-cta" href="https://dsc.blue-lol.de" target="_blank" rel="noopener">Support</a>
     </nav>
-    <div class="nav-auth" data-global-auth data-auth-return="/tester.html"><a class="nav-login" href="/auth/discord?return=/tester.html">Discord Login</a></div>
+    <div class="nav-auth" data-global-auth data-auth-return="/tester.html" data-auth-no-login="true"></div>
   </header>
 
   <main data-tester-page>
@@ -50,8 +50,7 @@
         <div class="glass-panel tester-locked" data-tester-locked hidden>
           <span class="choice-icon">🔐</span>
           <h2>Tester-Zugriff erforderlich</h2>
-          <p>Diese Seite wird nur angezeigt, wenn du auf dem Main-Discord die Rolle <strong>TESTER_ROLE_ID</strong> besitzt. Nach dem Login prüft der Bot deine Rolle automatisch.</p>
-          <a class="btn primary" href="/auth/discord?return=/tester.html">Mit Discord einloggen</a>
+          <p>Diese Seite ist nur für Mitglieder mit der Tester-Rolle auf dem Main-Discord sichtbar. Falls du die Rolle gerade erst bekommen hast, warte kurz und lade die Seite neu.</p>
         </div>
 
         <div class="tester-shell" data-tester-shell hidden>
