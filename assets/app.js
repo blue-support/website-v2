@@ -132,6 +132,20 @@ function ensureUpdatesNavLink() {
   else nav.appendChild(link);
 }
 
+function ensureTesterNavLink() {
+  const nav = $('[data-nav]');
+  if (!nav || navHasPath(nav, '/tester.html') || navHasPath(nav, '/tester') || navHasPath(nav, '/tester-dash')) return;
+  const link = document.createElement('a');
+  link.href = '/tester.html';
+  link.textContent = 'Tester Dash';
+  if (normalizeNavPath(window.location.pathname) === '/tester.html' || normalizeNavPath(window.location.pathname) === '/tester') {
+    link.classList.add('active');
+  }
+  const dashboard = Array.from(nav.querySelectorAll('a[href]')).find((item) => normalizeNavPath(item.getAttribute('href')) === '/dashboard' || normalizeNavPath(item.getAttribute('href')) === '/dashboard.html');
+  if (dashboard && dashboard.nextSibling) nav.insertBefore(link, dashboard.nextSibling);
+  else nav.appendChild(link);
+}
+
 
 function initNavigation() {
   const toggle = $('[data-nav-toggle]');
@@ -307,6 +321,16 @@ async function initGlobalAuth() {
     auth = await response.json();
   } catch (error) {
     console.warn('Login-Status konnte nicht geladen werden:', error);
+  }
+
+  if (auth.loggedIn && auth.user) {
+    try {
+      const testerResponse = await fetch('/api/tester/me', { cache: 'no-store' });
+      const tester = await testerResponse.json();
+      if (tester?.testerAccess?.isTester) ensureTesterNavLink();
+    } catch (error) {
+      // Tester-Dash bleibt verborgen, wenn der Bot die Rolle noch nicht bestätigt hat.
+    }
   }
 
   authSlots.forEach((slot) => {
@@ -892,6 +916,140 @@ function discordGuildIconUrl(guild) {
   if (guild.icon && String(guild.icon).startsWith('http')) return guild.icon;
   if (guild.icon && guild.id) return `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png?size=96`;
   return '';
+}
+
+
+async function initTesterPage() {
+  const root = $('[data-tester-page]');
+  if (!root) return;
+
+  const messageBox = $('[data-tester-message]');
+  const locked = $('[data-tester-locked]');
+  const shell = $('[data-tester-shell]');
+  const form = $('[data-tester-report-form]');
+  const history = $('[data-tester-history]');
+  const imageInput = $('[data-tester-images]');
+  const imageHint = $('[data-tester-image-hint]');
+
+  let loaded = null;
+
+  function testerNotice(text, type = 'info') {
+    if (!messageBox) return;
+    messageBox.hidden = false;
+    messageBox.className = `notice-card ${type}`;
+    messageBox.textContent = text;
+  }
+
+  function formatTesterDate(value) {
+    const date = value ? new Date(value) : null;
+    if (!date || Number.isNaN(date.getTime())) return 'Unbekannt';
+    return date.toLocaleString('de-DE');
+  }
+
+  function testerStatusClass(status) {
+    const value = String(status || '').toLowerCase();
+    if (value === 'fixed') return 'online';
+    if (value === 'rejected') return 'offline';
+    if (value === 'in_review') return 'degraded';
+    return 'maintenance';
+  }
+
+  function testerStatusLabel(report) {
+    return report?.statusLabel || ({ pending: 'Offen', in_review: 'In Bearbeitung', fixed: 'Bug wurde gefixt', rejected: 'Bug Report Abgelehnt' }[report?.status] || 'Unbekannt');
+  }
+
+  function renderTesterHistory(reports) {
+    if (!history) return;
+    if (!Array.isArray(reports) || !reports.length) {
+      history.innerHTML = '<p class="muted">Noch keine Bug-Reports gemeldet.</p>';
+      return;
+    }
+    history.innerHTML = reports.map((report) => `
+      <article class="tester-history-item">
+        <div class="tester-history-head">
+          <div>
+            <strong>${escapeHtml(report.title || 'Ohne Titel')}</strong>
+            <small>${escapeHtml(report.category || 'Kategorie')} · ${escapeHtml(report.page || 'Seite')} · ${escapeHtml(formatTesterDate(report.createdAt))}</small>
+          </div>
+          <span class="chip ${escapeHtml(testerStatusClass(report.status))}">${escapeHtml(testerStatusLabel(report))}</span>
+        </div>
+        <p>${escapeHtml(report.description || '').replace(/\n/g, '<br>')}</p>
+        ${report.decisionReason ? `<div class="tester-decision"><strong>Grund:</strong> ${escapeHtml(report.decisionReason).replace(/\n/g, '<br>')}</div>` : ''}
+        ${Array.isArray(report.images) && report.images.length ? `<div class="tester-report-images">${report.images.map((image) => `<a href="${escapeHtml(image.url)}" target="_blank" rel="noopener"><img src="${escapeHtml(image.url)}" alt="${escapeHtml(image.originalName || 'Bug Bild')}" loading="lazy"></a>`).join('')}</div>` : ''}
+      </article>
+    `).join('');
+  }
+
+  async function loadTesterDash() {
+    const authResponse = await fetch('/api/auth/me', { cache: 'no-store' });
+    const auth = await authResponse.json().catch(() => ({}));
+    if (!auth.loggedIn) {
+      if (locked) locked.hidden = false;
+      if (shell) shell.hidden = true;
+      testerNotice('Bitte melde dich mit Discord an, um den Tester Dash zu öffnen.', 'warn');
+      return;
+    }
+
+    const response = await fetch('/api/tester/me', { cache: 'no-store' });
+    const data = await response.json().catch(() => ({}));
+    loaded = data;
+    const access = data.testerAccess || {};
+
+    if (!access.isTester) {
+      if (locked) locked.hidden = false;
+      if (shell) shell.hidden = true;
+      testerNotice(access.message || 'Du hast aktuell keinen Tester-Zugriff.', access.checking ? 'warn' : 'error');
+      return;
+    }
+
+    ensureTesterNavLink();
+    if (locked) locked.hidden = true;
+    if (shell) shell.hidden = false;
+    if (messageBox) messageBox.hidden = true;
+    renderTesterHistory(data.reports || []);
+  }
+
+  imageInput?.addEventListener('change', () => {
+    const files = Array.from(imageInput.files || []);
+    if (files.length > 3) {
+      const transfer = new DataTransfer();
+      files.slice(0, 3).forEach((file) => transfer.items.add(file));
+      imageInput.files = transfer.files;
+      testerNotice('Du kannst maximal 3 Bilder anhängen. Ich habe die ersten 3 behalten.', 'warn');
+    }
+    if (imageHint) imageHint.textContent = `${Math.min(files.length, 3)} / 3 Bilder ausgewählt`;
+  });
+
+  form?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const submit = form.querySelector('button[type="submit"]');
+    if (submit) {
+      submit.disabled = true;
+      submit.textContent = 'Report wird gesendet...';
+    }
+    try {
+      const formData = new FormData(form);
+      const response = await fetch('/api/tester/reports', { method: 'POST', body: formData });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.ok) {
+        testerNotice(result.error || 'Bug-Report konnte nicht gesendet werden.', 'error');
+        return;
+      }
+      testerNotice('✅ Bug-Report wurde gespeichert. Der Bot erstellt gleich den privaten Bug-Kanal.', 'success');
+      form.reset();
+      if (imageHint) imageHint.textContent = '0 / 3 Bilder ausgewählt';
+      await loadTesterDash();
+    } catch (error) {
+      testerNotice('Bug-Report konnte nicht gesendet werden. Bitte versuche es erneut.', 'error');
+    } finally {
+      if (submit) {
+        submit.disabled = false;
+        submit.textContent = 'Bug-Report senden';
+      }
+    }
+  });
+
+  await loadTesterDash();
 }
 
 function dashboardSelectOptions(items, selected = []) {
@@ -2674,4 +2832,5 @@ async function initDashboardPage() {
 initGlobalAuth();
 initUnbanPage();
 initTicketPage();
+initTesterPage();
 initDashboardPage();
