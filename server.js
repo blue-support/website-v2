@@ -2622,37 +2622,18 @@ function queueTicketEligibilityCheck(user) {
 
 function getTicketAccessForUser(user) {
   if (!user?.id) return { ready: false, hasPremium: false, message: 'Bitte melde dich mit Discord an.' };
-  const data = loadTicketEligibility();
-  const entry = data.users[String(user.id)] || null;
-  const maxAge = 1000 * 60; // Premium-Rolle wird spätestens alle 60 Sekunden neu geprüft.
 
-  if (!entry) {
-    queueTicketEligibilityCheck(user);
-    return {
-      ready: false,
-      hasPremium: false,
-      checking: true,
-      message: 'Premium-Rolle wird geprüft. Bitte warte kurz.'
-    };
-  }
-
-  const checkedAtMs = Number(entry.checkedAtMs || 0);
-  const isStale = !checkedAtMs || Date.now() - checkedAtMs > maxAge;
-  if (isStale) {
-    queueTicketEligibilityCheck(user);
-  }
-
+  // Ticket Support ist für alle eingeloggten Discord-User freigeschaltet.
+  // Die alte Eligibility/Premium-Prüfung bleibt nur für Abwärtskompatibilität der Bot-API bestehen.
   return {
     ready: true,
-    hasPremium: Boolean(entry.hasPremium),
-    memberFound: Boolean(entry.memberFound),
-    highestRank: entry.highestRank || null,
-    checkedAt: entry.checkedAt || null,
-    checking: isStale,
-    nextCheckInSeconds: 60,
-    message: entry.hasPremium
-      ? (isStale ? 'Premium-Zugriff bestätigt. Blue prüft deine Rolle erneut.' : 'Premium-Zugriff bestätigt.')
-      : (isStale ? 'Blue Premium benötigt. Blue prüft deine Rolle erneut.' : 'Blue Premium benötigt: Du brauchst die Premium-Rolle auf dem Support Server, um Website-Tickets zu öffnen.')
+    hasPremium: true,
+    memberFound: true,
+    highestRank: null,
+    checkedAt: new Date().toISOString(),
+    checking: false,
+    nextCheckInSeconds: 0,
+    message: 'Ticket Support ist für alle User freigeschaltet.'
   };
 }
 
@@ -2724,14 +2705,6 @@ app.post('/api/tickets/create', requireUser, (req, res) => {
 
   const reason = sanitizeText(req.body.reason, 1200);
   if (!reason) return res.status(400).json({ ok: false, error: 'Bitte gib einen Grund an.' });
-
-  const ticketAccess = getTicketAccessForUser(req.session.discordUser);
-  if (!ticketAccess.ready) {
-    return res.status(423).json({ ok: false, error: ticketAccess.message || 'Premium-Status wird noch geprüft.' });
-  }
-  if (!ticketAccess.hasPremium) {
-    return res.status(403).json({ ok: false, error: ticketAccess.message || 'Blue Premium benötigt: Du brauchst die Premium-Rolle, um ein Website-Ticket zu öffnen.' });
-  }
 
   const data = loadTickets();
   const openTicket = data.tickets.find((ticket) => ticket.user?.id === req.session.discordUser.id && ticket.status !== 'closed');
@@ -2914,7 +2887,7 @@ app.post('/api/tickets/bot/eligibility-status', requireTicketBot, (req, res) => 
   const access = loadTicketEligibility();
   access.users[userId] = {
     userId,
-    hasPremium: Boolean(req.body.hasPremium),
+    hasPremium: true,
     memberFound: Boolean(req.body.memberFound),
     highestRank: req.body.highestRank || null,
     checkedAt: new Date().toISOString(),
