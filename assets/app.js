@@ -936,6 +936,26 @@ async function initTesterPage() {
   const imageHint = $('[data-tester-image-hint]');
 
   let loaded = null;
+  let selectedTesterImages = [];
+
+  function syncTesterImageInput() {
+    if (!imageInput) return;
+    try {
+      const transfer = new DataTransfer();
+      selectedTesterImages.slice(0, 3).forEach((file) => transfer.items.add(file));
+      imageInput.files = transfer.files;
+    } catch (error) {
+      // Manche sehr alten Browser erlauben kein programmgesteuertes Setzen von FileList.
+    }
+    if (imageHint) {
+      const names = selectedTesterImages.map((file) => file.name).join(', ');
+      imageHint.textContent = `${selectedTesterImages.length} / 3 Bilder ausgewählt${names ? ` · ${names}` : ''}`;
+    }
+  }
+
+  function testerImageKey(file) {
+    return `${file.name}:${file.size}:${file.lastModified}`;
+  }
 
   function testerNotice(text, type = 'info') {
     if (!messageBox) return;
@@ -1014,14 +1034,20 @@ async function initTesterPage() {
   }
 
   imageInput?.addEventListener('change', () => {
-    const files = Array.from(imageInput.files || []);
-    if (files.length > 3) {
-      const transfer = new DataTransfer();
-      files.slice(0, 3).forEach((file) => transfer.items.add(file));
-      imageInput.files = transfer.files;
-      testerNotice('Du kannst maximal 3 Bilder anhängen. Ich habe die ersten 3 behalten.', 'warn');
+    const incoming = Array.from(imageInput.files || []).filter((file) => String(file.type || '').startsWith('image/'));
+    const known = new Set(selectedTesterImages.map(testerImageKey));
+    for (const file of incoming) {
+      if (selectedTesterImages.length >= 3) break;
+      const key = testerImageKey(file);
+      if (!known.has(key)) {
+        selectedTesterImages.push(file);
+        known.add(key);
+      }
     }
-    if (imageHint) imageHint.textContent = `${Math.min(files.length, 3)} / 3 Bilder ausgewählt`;
+    if (incoming.length && selectedTesterImages.length >= 3 && incoming.length + known.size > 3) {
+      testerNotice('Du kannst maximal 3 Bilder anhängen. Weitere Bilder wurden nicht übernommen.', 'warn');
+    }
+    syncTesterImageInput();
   });
 
   form?.addEventListener('submit', async (event) => {
@@ -1041,7 +1067,8 @@ async function initTesterPage() {
       }
       testerNotice('✅ Bug-Report wurde gespeichert. Der Bot erstellt gleich den privaten Bug-Kanal.', 'success');
       form.reset();
-      if (imageHint) imageHint.textContent = '0 / 3 Bilder ausgewählt';
+      selectedTesterImages = [];
+      syncTesterImageInput();
       await loadTesterDash();
     } catch (error) {
       testerNotice('Bug-Report konnte nicht gesendet werden. Bitte versuche es erneut.', 'error');
