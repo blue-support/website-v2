@@ -339,6 +339,10 @@ async function initGlobalAuth() {
       returnPath = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
     }
     if (!auth.loggedIn || !auth.user) {
+      if (slot.dataset.authNoLogin === 'true') {
+        slot.innerHTML = '';
+        return;
+      }
       const loginLabel = auth.hasCachedLogin ? 'Discord Login' : 'Discord Login';
       slot.innerHTML = `<a class="nav-login" data-discord-login-link href="/auth/discord?return=${encodeURIComponent(returnPath)}">${loginLabel}</a>`;
       const loginLink = $('[data-discord-login-link]', slot);
@@ -986,7 +990,7 @@ async function initTesterPage() {
     if (!auth.loggedIn) {
       if (locked) locked.hidden = false;
       if (shell) shell.hidden = true;
-      testerNotice('Bitte melde dich mit Discord an, um den Tester Dash zu öffnen.', 'warn');
+      testerNotice('Tester-Zugriff konnte nicht bestätigt werden. Öffne den Tester Dash über die Website-Navigation, nachdem deine Rolle erkannt wurde.', 'warn');
       return;
     }
 
