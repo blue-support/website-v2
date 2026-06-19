@@ -2122,6 +2122,57 @@ app.post('/api/dashboard/bot/moderation-action-result', requireDashboardBot, (re
   res.json({ ok: true });
 });
 
+
+app.delete('/api/dashboard/guild/:guildId/ticket/panel/:panelId', requireUser, (req, res) => {
+  const guildId = String(req.params.guildId || '').replace(/\D/g, '');
+  const common = dashboardCommonGuild(req, guildId);
+  if (!common) return res.status(403).json({ ok: false, error: 'Nicht verfügbar - Administrator benötigt. Du brauchst Administratorrechte auf diesem Server.' });
+
+  const access = dashboardAccessFor(req.session.discordUser.id, guildId);
+  if (access.checked && access.canManage === false) return res.status(403).json({ ok: false, error: 'Der Bot konnte deine Administratorrechte auf diesem Server nicht bestätigen.' });
+
+  const panelId = dashboardSanitizePanelId(req.params.panelId);
+  const configs = loadDashboardTicketConfigs();
+  const oldConfig = configs.configs[guildId] || {};
+  const panels = Array.isArray(oldConfig.panels) ? oldConfig.panels.slice(0, 25) : [];
+  const existingIndex = panels.findIndex((panel) => dashboardSanitizePanelId(panel?.id) === panelId);
+  if (existingIndex < 0) return res.status(404).json({ ok: false, error: 'Dieses Ticket-Panel wurde nicht gefunden.' });
+
+  const removedPanel = panels[existingIndex];
+  const nextPanels = panels.filter((_panel, index) => index !== existingIndex);
+  const latestPanel = nextPanels[nextPanels.length - 1] || null;
+  const now = new Date().toISOString();
+  const config = {
+    ...oldConfig,
+    guildId,
+    panels: nextPanels,
+    panelId: latestPanel ? dashboardSanitizePanelId(latestPanel.id) : null,
+    panelName: latestPanel ? dashboardPanelDisplayName(latestPanel) : null,
+    panelChannelId: latestPanel?.panelChannelId || latestPanel?.panel_channel_id || '',
+    panelMessageId: latestPanel?.panelMessageId || latestPanel?.panel_message_id || null,
+    panelEmbed: latestPanel?.panelEmbed || latestPanel?.panel_embed || null,
+    updatedBy: req.session.discordUser,
+    updatedAt: now,
+    status: 'pending_delete_panel'
+  };
+  configs.configs[guildId] = config;
+  saveDashboardTicketConfigs(configs);
+
+  const actions = loadDashboardTicketActions();
+  actions.actions.push({
+    id: `ticket_delete_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
+    type: 'delete_ticket_panel',
+    guildId,
+    panelId,
+    panel: removedPanel,
+    status: 'pending',
+    createdAt: now
+  });
+  saveDashboardTicketActions(actions);
+
+  res.json({ ok: true, config: dashboardPublicTicketConfig(config), message: 'Ticket-Panel wird vom Bot gelöscht.' });
+});
+
 app.get('/api/dashboard/bot/ticket-actions', requireDashboardBot, (_req, res) => {
   const data = loadDashboardTicketActions();
   const actions = data.actions.filter((action) => action.status === 'pending');
@@ -2138,14 +2189,16 @@ app.post('/api/dashboard/bot/ticket-action-result', requireDashboardBot, (req, r
   action.finishedAt = new Date().toISOString();
   saveDashboardTicketActions(data);
 
-  if (action.type === 'apply_ticket_setup' && action.guildId) {
+  if (['apply_ticket_setup', 'delete_ticket_panel'].includes(action.type) && action.guildId) {
     const configs = loadDashboardTicketConfigs();
     if (configs.configs[action.guildId]) {
       configs.configs[action.guildId].status = action.status;
       configs.configs[action.guildId].lastResult = req.body;
-      configs.configs[action.guildId].panelId = req.body.panelId || configs.configs[action.guildId].panelId || null;
-      configs.configs[action.guildId].panelName = req.body.panelName || configs.configs[action.guildId].panelName || null;
-      configs.configs[action.guildId].panelMessageId = req.body.panelMessageId || configs.configs[action.guildId].panelMessageId || null;
+      if (req.body.panelId !== undefined) configs.configs[action.guildId].panelId = req.body.panelId || null;
+      if (req.body.panelName !== undefined) configs.configs[action.guildId].panelName = req.body.panelName || null;
+      if (req.body.panelChannelId !== undefined) configs.configs[action.guildId].panelChannelId = req.body.panelChannelId || '';
+      if (req.body.panelMessageId !== undefined) configs.configs[action.guildId].panelMessageId = req.body.panelMessageId || null;
+      if (req.body.panelEmbed !== undefined) configs.configs[action.guildId].panelEmbed = req.body.panelEmbed || null;
       if (Array.isArray(req.body.panels)) configs.configs[action.guildId].panels = req.body.panels;
       configs.configs[action.guildId].updatedAt = new Date().toISOString();
       saveDashboardTicketConfigs(configs);
