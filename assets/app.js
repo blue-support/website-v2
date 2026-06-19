@@ -1142,6 +1142,8 @@ async function initDashboardPage() {
     { id: 'warnings', label: 'Warnings' },
   ];
   let ticketCategories = [];
+  let ticketPanels = [];
+  let selectedTicketPanelId = null;
   let ticketPanelEmbedIsDefault = true;
   let dashboardMessages = [];
   let selectedDashboardMessageId = null;
@@ -1231,6 +1233,20 @@ async function initDashboardPage() {
     showDashboardToast(text, type);
     showDashboardMessage(text, type);
     if (section) showModuleFeedback(section, text, type);
+  }
+
+  function dashboardTrySendCooldown(key, section) {
+    const cooldownSeconds = 10;
+    const now = Date.now();
+    const last = Number(dashboardTrySendCooldown.map?.get(key) || 0);
+    const remaining = Math.ceil(((last + cooldownSeconds * 1000) - now) / 1000);
+    if (remaining > 0) {
+      dashboardNotify(section, `Spamschutz: Du kannst in ${remaining} Sekunden wieder senden.`, 'warn');
+      return false;
+    }
+    if (!dashboardTrySendCooldown.map) dashboardTrySendCooldown.map = new Map();
+    dashboardTrySendCooldown.map.set(key, now);
+    return true;
   }
 
   function setWorkspaceVisible(visible) {
@@ -1480,6 +1496,75 @@ async function initDashboardPage() {
     return cleaned.length ? cleaned : [emptyTicketCategory(0)];
   }
 
+  function createTicketPanelId() {
+    return `panel_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  function normalizeTicketPanels(config = {}) {
+    const raw = Array.isArray(config.panels) ? config.panels : [];
+    const panels = raw.map((panel, index) => {
+      const embed = panel.panelEmbed || panel.panel_embed || null;
+      const title = String(embed?.title || '').trim();
+      return {
+        id: String(panel.id || `panel_${index + 1}`),
+        name: String(panel.name || title || `Ticket Support ${index + 1}`).slice(0, 80),
+        panelChannelId: String(panel.panelChannelId || panel.panel_channel_id || ''),
+        panelMessageId: panel.panelMessageId || panel.panel_message_id || null,
+        panelEmbed: embed,
+        createdAt: panel.createdAt || panel.created_at || null,
+        updatedAt: panel.updatedAt || panel.updated_at || null,
+      };
+    });
+    if (!panels.length && (config.panelChannelId || config.panel_channel_id || config.panelEmbed || config.panel_embed)) {
+      const embed = config.panelEmbed || config.panel_embed || null;
+      panels.push({
+        id: 'panel_1',
+        name: String(embed?.title || 'Ticket Support').slice(0, 80),
+        panelChannelId: String(config.panelChannelId || config.panel_channel_id || ''),
+        panelMessageId: config.panelMessageId || config.panel_message_id || null,
+        panelEmbed: embed,
+        createdAt: config.createdAt || null,
+        updatedAt: config.updatedAt || config.updated_at || null,
+      });
+    }
+    return panels;
+  }
+
+  function currentTicketPanelName(panelEmbed = getTicketPanelEmbedFromForm(true)) {
+    return String(panelEmbed?.title || '').trim().slice(0, 80) || 'Ticket Support';
+  }
+
+  function applyTicketPanelToForm(panel) {
+    if (!ticketForm || !panel) return;
+    selectedTicketPanelId = String(panel.id || createTicketPanelId());
+    const panelSelect = $('[data-dashboard-ticket-panel-channel]');
+    if (panelSelect && panel.panelChannelId) panelSelect.value = String(panel.panelChannelId);
+    setTicketPanelEmbedForm(panel.panelEmbed || null, !panel.panelEmbed);
+    renderTicketPanelHistory();
+    updateTicketPreview();
+  }
+
+  function renderTicketPanelHistory() {
+    const list = $('[data-dashboard-ticket-panel-history]');
+    if (!list) return;
+    if (!ticketPanels.length) {
+      list.innerHTML = '<p class="muted compact">Noch kein Panel gespeichert. Beim Speichern wird ein neues Panel angelegt.</p>';
+      return;
+    }
+    list.innerHTML = ticketPanels.map((panel) => `
+      <button class="ticket-panel-history-item ${String(panel.id) === String(selectedTicketPanelId) ? 'active' : ''}" type="button" data-ticket-panel-id="${escapeHtml(panel.id)}">
+        <strong>${escapeHtml(panel.name || 'Ticket Support')}</strong>
+        <small>${panel.panelMessageId ? 'Gesendet' : 'Wartet auf Bot'}${panel.updatedAt ? ` · ${escapeHtml(formatTicketDate(panel.updatedAt))}` : ''}</small>
+      </button>
+    `).join('');
+    $$('[data-ticket-panel-id]', list).forEach((button) => {
+      button.addEventListener('click', () => {
+        const panel = ticketPanels.find((item) => String(item.id) === String(button.dataset.ticketPanelId));
+        if (panel) applyTicketPanelToForm(panel);
+      });
+    });
+  }
+
   function updateTicketPreview() {
     if (!ticketForm) return;
     const panelSelect = $('[data-dashboard-ticket-panel-channel]');
@@ -1623,11 +1708,16 @@ async function initDashboardPage() {
     if (ticketCategorySelect) ticketCategorySelect.innerHTML = '<option value="">Discord-Kategorie auswählen</option>' + dashboardSelectOptions(categoryChannels, [config.ticketCategoryId || config.ticket_category_id].filter(Boolean));
     if (logSelect) logSelect.innerHTML = '<option value="">Log-Kanal auswählen</option>' + dashboardSelectOptions(textChannels, [config.logChannelId || config.log_channel_id].filter(Boolean));
     ticketCategories = normalizeTicketCategories(config.categories || []);
-    setTicketPanelEmbedForm(config.panelEmbed || config.panel_embed || null);
+    ticketPanels = normalizeTicketPanels(config);
+    selectedTicketPanelId = config.panelId || config.panel_id || (ticketPanels[0]?.id || createTicketPanelId());
+    const selectedPanel = ticketPanels.find((panel) => String(panel.id) === String(selectedTicketPanelId)) || ticketPanels[0] || null;
+    if (selectedPanel) applyTicketPanelToForm(selectedPanel);
+    else setTicketPanelEmbedForm(config.panelEmbed || config.panel_embed || null);
+    renderTicketPanelHistory();
     const status = $('[data-dashboard-ticket-status]');
     if (status) {
-      const active = Boolean(config.panelChannelId || config.panel_channel_id);
-      status.textContent = active ? 'Eingerichtet' : 'Nicht eingerichtet';
+      const active = Boolean(config.panelChannelId || config.panel_channel_id || ticketPanels.length);
+      status.textContent = active ? `${ticketPanels.length || 1} Panel` : 'Nicht eingerichtet';
       status.className = `chip ${active ? 'online' : ''}`;
     }
     renderTicketCategoryRows();
@@ -2587,6 +2677,7 @@ async function initDashboardPage() {
     };
     if (!payload.channelId) return dashboardNotify('community', 'Bitte wähle einen Teamlist-Kanal.', 'warn');
     if (!payload.roleIds.length) return dashboardNotify('community', 'Bitte wähle mindestens eine Rolle für die Teamliste.', 'warn');
+    if (!dashboardTrySendCooldown(`community:${selectedGuildId}`, 'community')) return;
     const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/community`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2715,6 +2806,16 @@ async function initDashboardPage() {
     dashboardNotify('ticket', 'Ticket-Panel wurde auf Standard zurückgesetzt. Speichern nicht vergessen.', 'info');
   });
 
+  $('[data-dashboard-ticket-new-panel]')?.addEventListener('click', () => {
+    selectedTicketPanelId = createTicketPanelId();
+    setTicketPanelEmbedForm(null, true);
+    const panelSelect = $('[data-dashboard-ticket-panel-channel]');
+    if (panelSelect) panelSelect.value = '';
+    renderTicketPanelHistory();
+    updateTicketPreview();
+    dashboardNotify('ticket', 'Neues Ticket-Panel vorbereitet. Gib Titel/Kanal ein und speichere.', 'info');
+  });
+
   $('[data-dashboard-ticket-add-category]')?.addEventListener('click', () => {
     if (ticketCategories.length >= 5) return dashboardNotify('ticket', 'Maximal 5 Ticket-Kategorien sind möglich.', 'warn');
     ticketCategories.push(emptyTicketCategory(ticketCategories.length));
@@ -2734,14 +2835,19 @@ async function initDashboardPage() {
     })).filter((category) => category.name);
     if (!categories.length) return dashboardNotify('ticket', 'Bitte erstelle mindestens eine Ticket-Kategorie.', 'warn');
     if (categories.some((category) => !category.roleIds.length)) return dashboardNotify('ticket', 'Jede Ticket-Kategorie braucht mindestens eine Team-Rolle.', 'warn');
+    const panelEmbed = getTicketPanelEmbedFromForm(false);
+    const previewEmbed = getTicketPanelEmbedFromForm(true);
     const payload = {
+      panelId: selectedTicketPanelId || createTicketPanelId(),
+      panelName: currentTicketPanelName(previewEmbed),
       panelChannelId: formData.get('ticketPanelChannelId'),
       ticketCategoryId: formData.get('ticketCategoryId'),
       logChannelId: formData.get('ticketLogChannelId'),
       categories,
-      panelEmbed: getTicketPanelEmbedFromForm(false)
+      panelEmbed
     };
     if (!payload.panelChannelId || !payload.ticketCategoryId || !payload.logChannelId) return dashboardNotify('ticket', 'Bitte wähle Panel-Kanal, Ticket-Kategorie und Log-Kanal aus.', 'warn');
+    if (!dashboardTrySendCooldown(`ticket:${selectedGuildId}`, 'ticket')) return;
     const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/ticket`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2769,6 +2875,7 @@ async function initDashboardPage() {
     const payload = currentMessageFromForm();
     if (!payload.name.trim()) return dashboardNotify('messages', 'Bitte gib der Message einen Namen.', 'warn');
     if (!payload.channelId) return dashboardNotify('messages', 'Bitte wähle einen Kanal aus.', 'warn');
+    if (!dashboardTrySendCooldown(`messages:${selectedGuildId}`, 'messages')) return;
     const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2845,6 +2952,7 @@ async function initDashboardPage() {
         footer: formData.get('footer')
       }
     };
+    if (!dashboardTrySendCooldown(`verification:${selectedGuildId}`, 'verification')) return;
     const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/verification`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
