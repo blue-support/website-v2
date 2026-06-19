@@ -1897,6 +1897,7 @@ app.post('/api/dashboard/guild/:guildId/verification', requireUser, (req, res) =
   const mode = String(body.mode || 'manual') === 'auto' ? 'auto' : 'manual';
   const addRoleIds = Array.isArray(body.addRoleIds) ? body.addRoleIds.map(String).filter((id) => availableRoleIds.has(id)) : [];
   const removeRoleIds = Array.isArray(body.removeRoleIds) ? body.removeRoleIds.map(String).filter((id) => availableRoleIds.has(id)) : [];
+  const reviewRoleIds = Array.isArray(body.reviewRoleIds) ? body.reviewRoleIds.map(String).filter((id) => availableRoleIds.has(id)).slice(0, 10) : [];
   const channelId = String(body.channelId || '').replace(/\D/g, '');
   const logChannelId = String(body.logChannelId || '').replace(/\D/g, '');
   if (!addRoleIds.length) return res.status(400).json({ ok: false, error: 'Bitte wähle mindestens eine Rolle, die hinzugefügt werden soll.' });
@@ -1923,6 +1924,8 @@ app.post('/api/dashboard/guild/:guildId/verification', requireUser, (req, res) =
     mode,
     addRoleIds,
     removeRoleIds,
+    reviewRoleIds,
+    review_role_ids: reviewRoleIds,
     channelId,
     logChannelId: logChannelId || null,
     minAccountAgeEnabled,
