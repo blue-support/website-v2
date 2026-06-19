@@ -2535,6 +2535,12 @@ img,video,canvas{max-width:100%}
   gap: 8px;
   margin-top: 10px;
 }
+.ticket-panel-history-row {
+  display: grid;
+  grid-template-columns: 1fr 42px;
+  align-items: stretch;
+  gap: 8px;
+}
 .ticket-panel-history-item {
   width: 100%;
   border: 1px solid rgba(148, 163, 184, 0.2);
@@ -2553,9 +2559,23 @@ img,video,canvas{max-width:100%}
   color: var(--muted, #94a3b8);
   margin-top: 3px;
 }
-.ticket-panel-history-item.active {
+.ticket-panel-history-row.active .ticket-panel-history-item {
   border-color: rgba(56, 189, 248, 0.72);
   box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.24), 0 14px 30px rgba(14, 165, 233, 0.12);
+}
+.ticket-panel-delete {
+  border: 1px solid rgba(248, 113, 113, 0.36);
+  border-radius: 14px;
+  background: rgba(127, 29, 29, 0.22);
+  color: #fecaca;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+}
+.ticket-panel-delete:hover {
+  border-color: rgba(248, 113, 113, 0.72);
+  background: rgba(185, 28, 28, 0.34);
 }
 .compact-title h4 {
   margin: 0;

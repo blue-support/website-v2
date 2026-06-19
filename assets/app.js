@@ -1555,17 +1555,52 @@ async function initDashboardPage() {
       return;
     }
     list.innerHTML = ticketPanels.map((panel) => `
-      <button class="ticket-panel-history-item ${String(panel.id) === String(selectedTicketPanelId) ? 'active' : ''}" type="button" data-ticket-panel-id="${escapeHtml(panel.id)}">
-        <strong>${escapeHtml(panel.name || 'Ticket Support')}</strong>
-        <small>${panel.panelMessageId ? 'Gesendet' : 'Wartet auf Bot'}${panel.updatedAt ? ` · ${escapeHtml(formatTicketDate(panel.updatedAt))}` : ''}</small>
-      </button>
+      <div class="ticket-panel-history-row ${String(panel.id) === String(selectedTicketPanelId) ? 'active' : ''}">
+        <button class="ticket-panel-history-item" type="button" data-ticket-panel-open="${escapeHtml(panel.id)}" title="Panel bearbeiten">
+          <strong>${escapeHtml(panel.name || 'Ticket Support')}</strong>
+          <small>${panel.panelMessageId ? 'Gesendet' : 'Wartet auf Bot'}${panel.updatedAt ? ` · ${escapeHtml(formatTicketDate(panel.updatedAt))}` : ''}</small>
+        </button>
+        <button class="ticket-panel-delete" type="button" data-ticket-panel-delete="${escapeHtml(panel.id)}" aria-label="Panel löschen" title="Panel löschen">×</button>
+      </div>
     `).join('');
-    $$('[data-ticket-panel-id]', list).forEach((button) => {
+    $$('[data-ticket-panel-open]', list).forEach((button) => {
       button.addEventListener('click', () => {
-        const panel = ticketPanels.find((item) => String(item.id) === String(button.dataset.ticketPanelId));
+        const panel = ticketPanels.find((item) => String(item.id) === String(button.dataset.ticketPanelOpen));
         if (panel) applyTicketPanelToForm(panel);
       });
     });
+    $$('[data-ticket-panel-delete]', list).forEach((button) => {
+      button.addEventListener('click', async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        await deleteTicketPanel(button.dataset.ticketPanelDelete);
+      });
+    });
+  }
+
+
+  async function deleteTicketPanel(panelId) {
+    if (!selectedGuildId || !panelId) return;
+    const panel = ticketPanels.find((item) => String(item.id) === String(panelId));
+    const panelName = panel?.name || 'Ticket Panel';
+    const ok = window.confirm(`Panel "${panelName}" wirklich löschen? Die gespeicherte Discord-Panel-Nachricht wird vom Bot ebenfalls entfernt, wenn sie noch existiert.`);
+    if (!ok) return;
+    try {
+      const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/ticket/panel/${encodeURIComponent(panelId)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.ok) {
+        dashboardNotify('ticket', result.error || 'Panel konnte nicht gelöscht werden.', 'error');
+        return;
+      }
+      ticketDirty = false;
+      if (result.config) renderTicketConfig({ ticket: result.config }, dashboardChannels, dashboardCategoryChannels);
+      dashboardNotify('ticket', `Panel "${panelName}" wurde gelöscht.`, 'success');
+    } catch (error) {
+      dashboardNotify('ticket', 'Panel konnte nicht gelöscht werden.', 'error');
+    }
   }
 
   function updateTicketPreview() {
