@@ -1065,7 +1065,7 @@ async function initTesterPage() {
         testerNotice(result.error || 'Bug-Report konnte nicht gesendet werden.', 'error');
         return;
       }
-      testerNotice('✅ Bug-Report wurde gespeichert. Der Bot erstellt gleich den privaten Bug-Kanal.', 'success');
+      testerNotice('✅ Bug-Report wurde an den Bot gesendet. Der Bot speichert ihn auf dem Bot-Hosting und erstellt gleich den privaten Bug-Kanal.', 'success');
       form.reset();
       selectedTesterImages = [];
       syncTesterImageInput();
