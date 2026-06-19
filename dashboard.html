@@ -525,7 +525,19 @@
                     </div>
                     <button class="btn ghost" type="button" data-dashboard-ticket-panel-reset>Standard wiederherstellen</button>
                   </div>
-                  <p class="muted compact">Bearbeite das öffentliche Ticket-Panel. Mit Zurücksetzen nutzt Blue wieder das Standard-Embed.</p>
+                  <p class="muted compact">Bearbeite das öffentliche Ticket-Panel. Du kannst mehrere Panels speichern; im Verlauf werden sie nach dem Embed-Titel benannt.</p>
+                  <div class="ticket-panel-history-box">
+                    <div class="role-picker-title compact-title">
+                      <div>
+                        <span class="eyebrow">Panel Verlauf</span>
+                        <h4>Gespeicherte Ticket-Panels</h4>
+                      </div>
+                      <button class="btn ghost" type="button" data-dashboard-ticket-new-panel>+ Neues Panel</button>
+                    </div>
+                    <div class="ticket-panel-history-list" data-dashboard-ticket-panel-history>
+                      <p class="muted compact">Noch kein Panel gespeichert.</p>
+                    </div>
+                  </div>
                   <div class="form-row">
                     <label>Panel Author<input name="ticketPanelAuthor" maxlength="256" placeholder="Blue Support"></label>
                     <label>Author Image URL<input name="ticketPanelAuthorImage" placeholder="https://..."></label>

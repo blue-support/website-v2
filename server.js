@@ -77,6 +77,41 @@ const DASHBOARD_COMMUNITY_CONFIG_FILE = path.join(DATA_DIR, 'dashboard-community
 const DASHBOARD_COMMUNITY_ACTION_FILE = path.join(DATA_DIR, 'dashboard-community-actions.json');
 const DASHBOARD_SECURITY_CONFIG_FILE = path.join(DATA_DIR, 'dashboard-security-configs.json');
 const DASHBOARD_SECURITY_ACTION_FILE = path.join(DATA_DIR, 'dashboard-security-actions.json');
+const DASHBOARD_EMBED_SEND_COOLDOWN_SECONDS = Math.max(0, Number(process.env.DASHBOARD_EMBED_SEND_COOLDOWN_SECONDS || 10));
+const dashboardEmbedSendCooldowns = new Map();
+
+function dashboardCooldownKey(req, guildId, feature) {
+  const userId = String(req.session?.discordUser?.id || 'unknown');
+  return `${feature}:${guildId}:${userId}`;
+}
+
+function dashboardCheckSendCooldown(req, res, guildId, feature) {
+  if (!DASHBOARD_EMBED_SEND_COOLDOWN_SECONDS) return false;
+  const key = dashboardCooldownKey(req, guildId, feature);
+  const now = Date.now();
+  const last = Number(dashboardEmbedSendCooldowns.get(key) || 0);
+  const remaining = Math.ceil(((last + DASHBOARD_EMBED_SEND_COOLDOWN_SECONDS * 1000) - now) / 1000);
+  if (remaining > 0) {
+    res.status(429).json({ ok: false, cooldown: true, remainingSeconds: remaining, error: `Spamschutz: Bitte warte noch ${remaining} Sekunden, bevor du erneut senden kannst.` });
+    return true;
+  }
+  dashboardEmbedSendCooldowns.set(key, now);
+  return false;
+}
+
+function dashboardSanitizePanelId(value) {
+  return String(value || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80) || `panel_${Date.now()}_${crypto.randomUUID().slice(0, 6)}`;
+}
+
+function dashboardPanelDisplayName(panel) {
+  const raw = panel || {};
+  const direct = dashboardSanitizeText(raw.name, 80);
+  if (direct) return direct;
+  const embed = raw.panelEmbed || raw.panel_embed || {};
+  const title = dashboardSanitizeText(embed.title, 80);
+  return title || 'Ticket Support';
+}
+
 fs.mkdirSync(TICKET_UPLOAD_DIR, { recursive: true });
 fs.mkdirSync(TESTER_UPLOAD_DIR, { recursive: true });
 
@@ -1162,6 +1197,15 @@ function dashboardPublicModerationConfig(config) {
 
 function dashboardPublicTicketConfig(config) {
   if (!config || typeof config !== 'object') return null;
+  const panels = Array.isArray(config.panels) ? config.panels.map((panel) => ({
+    id: dashboardSanitizePanelId(panel.id),
+    name: dashboardPanelDisplayName(panel),
+    panelChannelId: panel.panelChannelId || panel.panel_channel_id ? String(panel.panelChannelId || panel.panel_channel_id) : '',
+    panelMessageId: panel.panelMessageId || panel.panel_message_id ? String(panel.panelMessageId || panel.panel_message_id) : null,
+    panelEmbed: panel.panelEmbed || panel.panel_embed || null,
+    createdAt: panel.createdAt || panel.created_at || null,
+    updatedAt: panel.updatedAt || panel.updated_at || null,
+  })).filter((panel) => panel.id) : [];
   return {
     guildId: String(config.guildId || ''),
     panelChannelId: config.panelChannelId ? String(config.panelChannelId) : '',
@@ -1173,6 +1217,7 @@ function dashboardPublicTicketConfig(config) {
       description: String(category.description || '').slice(0, 100),
       roleIds: Array.isArray(category.roleIds || category.role_ids) ? (category.roleIds || category.role_ids).map(String) : [],
     })).filter((category) => category.name) : [],
+    panels,
     panelMessageId: config.panelMessageId ? String(config.panelMessageId) : null,
     panelEmbed: config.panelEmbed || config.panel_embed || null,
     status: config.status || 'saved',
@@ -1499,6 +1544,8 @@ app.post('/api/dashboard/guild/:guildId/community', requireUser, (req, res) => {
   if (enabled && !availableChannelIds.has(channelId)) return res.status(400).json({ ok: false, error: 'Bitte wähle einen gültigen Teamlist-Kanal.' });
   if (enabled && !roleIds.length) return res.status(400).json({ ok: false, error: 'Bitte wähle mindestens eine Team-Rolle für die Teamliste.' });
 
+  if (enabled && dashboardCheckSendCooldown(req, res, guildId, 'community_teamlist')) return;
+
   const configs = loadDashboardCommunityConfigs();
   const oldConfig = configs.configs[guildId] || {};
   const now = new Date().toISOString();
@@ -1592,7 +1639,6 @@ app.post('/api/dashboard/guild/:guildId/ticket', requireUser, (req, res) => {
 
   const access = dashboardAccessFor(req.session.discordUser.id, guildId);
   if (access.checked && access.canManage === false) return res.status(403).json({ ok: false, error: 'Der Bot konnte deine Administratorrechte auf diesem Server nicht bestätigen.' });
-
   const botGuild = common.botGuild;
   const textChannelIds = new Set((botGuild.channels || []).filter((channel) => ['text', 'news'].includes(channel.type)).map((channel) => String(channel.id)));
   const categoryChannelIds = new Set((botGuild.channels || []).filter((channel) => channel.type === 'category').map((channel) => String(channel.id)));
@@ -1626,6 +1672,8 @@ app.post('/api/dashboard/guild/:guildId/ticket', requireUser, (req, res) => {
   if (!categories.length) return res.status(400).json({ ok: false, error: 'Bitte erstelle mindestens eine Ticket-Kategorie.' });
   if (categories.some((category) => !category.roleIds.length)) return res.status(400).json({ ok: false, error: 'Jede Ticket-Kategorie braucht mindestens eine Team-Rolle.' });
 
+  if (dashboardCheckSendCooldown(req, res, guildId, 'ticket_panel')) return;
+
   const rawPanelEmbed = body.panelEmbed && typeof body.panelEmbed === 'object' ? body.panelEmbed : null;
   const canEditTicketFooter = Boolean(access.hasPremiumFooter);
   const panelEmbed = rawPanelEmbed ? {
@@ -1639,13 +1687,24 @@ app.post('/api/dashboard/guild/:guildId/ticket', requireUser, (req, res) => {
   const configs = loadDashboardTicketConfigs();
   const oldConfig = configs.configs[guildId] || {};
   const now = new Date().toISOString();
+  const panelId = dashboardSanitizePanelId(body.panelId);
+  const panelName = dashboardPanelDisplayName({ name: body.panelName, panelEmbed });
+  const panels = Array.isArray(oldConfig.panels) ? oldConfig.panels.slice(0, 25) : [];
+  const panelEntry = { id: panelId, name: panelName, panelChannelId, panelEmbed, updatedAt: now, createdAt: panels.find((panel) => String(panel.id) === panelId)?.createdAt || now };
+  const existingPanelIndex = panels.findIndex((panel) => String(panel.id) === panelId);
+  if (existingPanelIndex >= 0) panels[existingPanelIndex] = { ...panels[existingPanelIndex], ...panelEntry };
+  else panels.push(panelEntry);
+
   const config = {
     ...oldConfig,
     guildId,
+    panelId,
+    panelName,
     panelChannelId,
     ticketCategoryId,
     logChannelId,
     categories,
+    panels,
     panelEmbed,
     updatedBy: req.session.discordUser,
     updatedAt: now,
@@ -1675,7 +1734,6 @@ app.post('/api/dashboard/guild/:guildId/messages', requireUser, (req, res) => {
 
   const access = dashboardAccessFor(req.session.discordUser.id, guildId);
   if (access.checked && access.canManage === false) return res.status(403).json({ ok: false, error: 'Der Bot konnte deine Administratorrechte auf diesem Server nicht bestätigen.' });
-
   const botGuild = common.botGuild;
   const textChannels = (botGuild.channels || []).filter((channel) => ['text', 'news'].includes(channel.type));
   const availableChannelIds = new Set(textChannels.map((channel) => String(channel.id)));
@@ -1703,6 +1761,8 @@ app.post('/api/dashboard/guild/:guildId/messages', requireUser, (req, res) => {
   if (!embed.title && !embed.description && !embed.image && !embed.thumbnail) {
     return res.status(400).json({ ok: false, error: 'Bitte fülle mindestens Titel, Beschreibung, Bild oder Thumbnail aus.' });
   }
+
+  if (dashboardCheckSendCooldown(req, res, guildId, 'dashboard_message')) return;
 
   const data = loadDashboardMessagesConfigs();
   // Wenn ein Admin ein Template mit derselben ID bewusst erneut speichert, darf es wieder aktiv werden.
@@ -1830,7 +1890,6 @@ app.post('/api/dashboard/guild/:guildId/verification', requireUser, (req, res) =
 
   const access = dashboardAccessFor(req.session.discordUser.id, guildId);
   if (access.checked && access.canManage === false) return res.status(403).json({ ok: false, error: 'Der Bot konnte deine Verwaltungsrechte auf diesem Server nicht bestätigen.' });
-
   const botGuild = common.botGuild;
   const availableRoleIds = new Set((botGuild.roles || []).map((role) => String(role.id)));
   const availableChannelIds = new Set((botGuild.channels || []).map((channel) => String(channel.id)));
@@ -1856,6 +1915,8 @@ app.post('/api/dashboard/guild/:guildId/verification', requireUser, (req, res) =
 
   const minAccountAgeEnabled = Boolean(body.minAccountAgeEnabled);
   const minAccountAgeDays = Math.max(0, Math.min(3650, Number.parseInt(body.minAccountAgeDays, 10) || 0));
+
+  if (dashboardCheckSendCooldown(req, res, guildId, 'verify_panel')) return;
 
   const config = {
     guildId,
@@ -2079,7 +2140,10 @@ app.post('/api/dashboard/bot/ticket-action-result', requireDashboardBot, (req, r
     if (configs.configs[action.guildId]) {
       configs.configs[action.guildId].status = action.status;
       configs.configs[action.guildId].lastResult = req.body;
+      configs.configs[action.guildId].panelId = req.body.panelId || configs.configs[action.guildId].panelId || null;
+      configs.configs[action.guildId].panelName = req.body.panelName || configs.configs[action.guildId].panelName || null;
       configs.configs[action.guildId].panelMessageId = req.body.panelMessageId || configs.configs[action.guildId].panelMessageId || null;
+      if (Array.isArray(req.body.panels)) configs.configs[action.guildId].panels = req.body.panels;
       configs.configs[action.guildId].updatedAt = new Date().toISOString();
       saveDashboardTicketConfigs(configs);
     }
