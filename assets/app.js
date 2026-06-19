@@ -1236,18 +1236,29 @@ async function initDashboardPage() {
     if (section) showModuleFeedback(section, text, type);
   }
 
-  function dashboardTrySendCooldown(key, section) {
+  function dashboardSendCooldownRemaining(key) {
     const cooldownSeconds = 10;
     const now = Date.now();
     const last = Number(dashboardTrySendCooldown.map?.get(key) || 0);
-    const remaining = Math.ceil(((last + cooldownSeconds * 1000) - now) / 1000);
+    return Math.max(0, Math.ceil(((last + cooldownSeconds * 1000) - now) / 1000));
+  }
+
+  function dashboardTrySendCooldown(key, section) {
+    const remaining = dashboardSendCooldownRemaining(key);
     if (remaining > 0) {
       dashboardNotify(section, `Spamschutz: Du kannst in ${remaining} Sekunden wieder senden.`, 'warn');
       return false;
     }
-    if (!dashboardTrySendCooldown.map) dashboardTrySendCooldown.map = new Map();
-    dashboardTrySendCooldown.map.set(key, now);
     return true;
+  }
+
+  function dashboardMarkSendCooldown(key) {
+    if (!dashboardTrySendCooldown.map) dashboardTrySendCooldown.map = new Map();
+    dashboardTrySendCooldown.map.set(key, Date.now());
+  }
+
+  function dashboardConfirmSend(message) {
+    return window.confirm(message || 'Diese Aktion sendet/aktualisiert ein Discord-Embed. Wirklich fortfahren?');
   }
 
   function setWorkspaceVisible(visible) {
@@ -1547,8 +1558,44 @@ async function initDashboardPage() {
     updateTicketPreview();
   }
 
+  function prepareNewTicketPanel() {
+    selectedTicketPanelId = createTicketPanelId();
+    setTicketPanelEmbedForm(null, true);
+    const panelSelect = $('[data-dashboard-ticket-panel-channel]');
+    if (panelSelect) panelSelect.value = '';
+    renderTicketPanelHistory();
+    updateTicketPreview();
+    dashboardNotify('ticket', 'Neues Ticket-Panel vorbereitet. Gib Titel/Kanal ein und speichere.', 'info');
+  }
+
+  function ensureTicketPanelHistoryList() {
+    let list = $('[data-dashboard-ticket-panel-history]');
+    if (list) return list;
+    const card = document.querySelector('.ticket-panel-embed-card') || ticketForm;
+    if (!card) return null;
+    const box = document.createElement('div');
+    box.className = 'ticket-panel-history-box';
+    box.innerHTML = `
+      <div class="role-picker-title compact-title">
+        <div>
+          <span class="eyebrow">Panel Verlauf</span>
+          <h4>Gespeicherte Ticket-Panels</h4>
+        </div>
+        <button class="btn ghost" type="button" data-dashboard-ticket-new-panel>+ Neues Panel</button>
+      </div>
+      <div class="ticket-panel-history-list" data-dashboard-ticket-panel-history>
+        <p class="muted compact">Noch kein Panel gespeichert.</p>
+      </div>
+    `;
+    const intro = card.querySelector('p.muted.compact');
+    if (intro) intro.insertAdjacentElement('afterend', box);
+    else card.insertBefore(box, card.firstElementChild?.nextSibling || card.firstChild);
+    box.querySelector('[data-dashboard-ticket-new-panel]')?.addEventListener('click', prepareNewTicketPanel);
+    return box.querySelector('[data-dashboard-ticket-panel-history]');
+  }
+
   function renderTicketPanelHistory() {
-    const list = $('[data-dashboard-ticket-panel-history]');
+    const list = ensureTicketPanelHistoryList();
     if (!list) return;
     if (!ticketPanels.length) {
       list.innerHTML = '<p class="muted compact">Noch kein Panel gespeichert. Beim Speichern wird ein neues Panel angelegt.</p>';
@@ -2716,14 +2763,17 @@ async function initDashboardPage() {
     };
     if (!payload.channelId) return dashboardNotify('community', 'Bitte wähle einen Teamlist-Kanal.', 'warn');
     if (!payload.roleIds.length) return dashboardNotify('community', 'Bitte wähle mindestens eine Rolle für die Teamliste.', 'warn');
-    if (!dashboardTrySendCooldown(`community:${selectedGuildId}`, 'community')) return;
+    if (!dashboardConfirmSend('Teamliste wirklich an Discord senden/aktualisieren?')) return;
+    const cooldownKey = `community:${selectedGuildId}`;
+    if (!dashboardTrySendCooldown(cooldownKey, 'community')) return;
     const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/community`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
     const result = await response.json().catch(() => ({}));
-    if (!response.ok || !result.ok) return dashboardNotify('community', result.error || 'Community konnte nicht gespeichert werden.', 'error');
+    if (!response.ok || !result.ok) return dashboardNotify('community', result.error || 'Community konnte nicht gespeichert werden.', result.cooldown ? 'warn' : 'error');
+    dashboardMarkSendCooldown(cooldownKey);
     communityDirty = false;
     if (result.config) renderCommunityConfig({ community: result.config }, dashboardChannels);
     dashboardNotify('community', 'Community gespeichert. Blue sendet/aktualisiert jetzt die Teamliste.', 'success');
@@ -2845,14 +2895,8 @@ async function initDashboardPage() {
     dashboardNotify('ticket', 'Ticket-Panel wurde auf Standard zurückgesetzt. Speichern nicht vergessen.', 'info');
   });
 
-  $('[data-dashboard-ticket-new-panel]')?.addEventListener('click', () => {
-    selectedTicketPanelId = createTicketPanelId();
-    setTicketPanelEmbedForm(null, true);
-    const panelSelect = $('[data-dashboard-ticket-panel-channel]');
-    if (panelSelect) panelSelect.value = '';
-    renderTicketPanelHistory();
-    updateTicketPreview();
-    dashboardNotify('ticket', 'Neues Ticket-Panel vorbereitet. Gib Titel/Kanal ein und speichere.', 'info');
+  $$('[data-dashboard-ticket-new-panel]').forEach((button) => {
+    button.addEventListener('click', prepareNewTicketPanel);
   });
 
   $('[data-dashboard-ticket-add-category]')?.addEventListener('click', () => {
@@ -2886,14 +2930,17 @@ async function initDashboardPage() {
       panelEmbed
     };
     if (!payload.panelChannelId || !payload.ticketCategoryId || !payload.logChannelId) return dashboardNotify('ticket', 'Bitte wähle Panel-Kanal, Ticket-Kategorie und Log-Kanal aus.', 'warn');
-    if (!dashboardTrySendCooldown(`ticket:${selectedGuildId}`, 'ticket')) return;
+    if (!dashboardConfirmSend(`Ticket-Panel "${payload.panelName || 'Ticket Support'}" wirklich an Discord senden/aktualisieren?`)) return;
+    const cooldownKey = `ticket:${selectedGuildId}`;
+    if (!dashboardTrySendCooldown(cooldownKey, 'ticket')) return;
     const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/ticket`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
     const result = await response.json().catch(() => ({}));
-    if (!response.ok || !result.ok) return dashboardNotify('ticket', result.error || 'Ticket-System konnte nicht gespeichert werden.', 'error');
+    if (!response.ok || !result.ok) return dashboardNotify('ticket', result.error || 'Ticket-System konnte nicht gespeichert werden.', result.cooldown ? 'warn' : 'error');
+    dashboardMarkSendCooldown(cooldownKey);
     ticketDirty = false;
     if (result.config) renderTicketConfig({ ticket: result.config }, dashboardChannels, dashboardCategoryChannels);
     dashboardNotify('ticket', 'Ticket-System gespeichert. Blue sendet/aktualisiert jetzt das Panel.', 'success');
@@ -2914,14 +2961,17 @@ async function initDashboardPage() {
     const payload = currentMessageFromForm();
     if (!payload.name.trim()) return dashboardNotify('messages', 'Bitte gib der Message einen Namen.', 'warn');
     if (!payload.channelId) return dashboardNotify('messages', 'Bitte wähle einen Kanal aus.', 'warn');
-    if (!dashboardTrySendCooldown(`messages:${selectedGuildId}`, 'messages')) return;
+    if (!dashboardConfirmSend(`Message "${payload.name.trim()}" wirklich an Discord senden/aktualisieren?`)) return;
+    const cooldownKey = `messages:${selectedGuildId}`;
+    if (!dashboardTrySendCooldown(cooldownKey, 'messages')) return;
     const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
     const result = await response.json().catch(() => ({}));
-    if (!response.ok || !result.ok) return dashboardNotify('messages', result.error || 'Message konnte nicht gesendet werden.', 'error');
+    if (!response.ok || !result.ok) return dashboardNotify('messages', result.error || 'Message konnte nicht gesendet werden.', result.cooldown ? 'warn' : 'error');
+    dashboardMarkSendCooldown(cooldownKey);
     const saved = result.message;
     const index = dashboardMessages.findIndex((message) => String(message.id) === String(saved.id));
     if (index >= 0) dashboardMessages[index] = saved;
@@ -2993,14 +3043,17 @@ async function initDashboardPage() {
         footer: formData.get('footer')
       }
     };
-    if (!dashboardTrySendCooldown(`verification:${selectedGuildId}`, 'verification')) return;
+    if (!dashboardConfirmSend('Verify-Panel wirklich an Discord senden/aktualisieren?')) return;
+    const cooldownKey = `verification:${selectedGuildId}`;
+    if (!dashboardTrySendCooldown(cooldownKey, 'verification')) return;
     const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/verification`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
     const result = await response.json().catch(() => ({}));
-    if (!response.ok || !result.ok) return dashboardNotify('verification', result.error || 'Verify Panel konnte nicht gespeichert werden.', 'error');
+    if (!response.ok || !result.ok) return dashboardNotify('verification', result.error || 'Verify Panel konnte nicht gespeichert werden.', result.cooldown ? 'warn' : 'error');
+    dashboardMarkSendCooldown(cooldownKey);
     dashboardDirty = false;
     dashboardNotify('verification', 'Verification gespeichert. Blue sendet/aktualisiert jetzt das Panel.', 'success');
   });
