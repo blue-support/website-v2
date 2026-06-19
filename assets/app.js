@@ -1112,6 +1112,7 @@ async function initDashboardPage() {
   let dashboardRoles = [];
   let selectedAddRoleIds = new Set();
   let selectedRemoveRoleIds = new Set();
+  let selectedReviewRoleIds = new Set();
   let dashboardDirty = false;
   let dashboardChannels = [];
   let dashboardCategoryChannels = [];
@@ -1403,8 +1404,10 @@ async function initDashboardPage() {
   function renderRolePickers() {
     renderRolePicker('[data-dashboard-add-role-picker]', selectedAddRoleIds, selectedRemoveRoleIds, 'add');
     renderRolePicker('[data-dashboard-remove-role-picker]', selectedRemoveRoleIds, selectedAddRoleIds, 'remove');
+    renderRolePicker('[data-dashboard-review-role-picker]', selectedReviewRoleIds, null, 'review');
     renderSelectedRoleTags('[data-dashboard-add-selected]', selectedAddRoleIds);
     renderSelectedRoleTags('[data-dashboard-remove-selected]', selectedRemoveRoleIds);
+    renderSelectedRoleTags('[data-dashboard-review-selected]', selectedReviewRoleIds);
   }
 
   function updateGlobalchatPreview() {
@@ -2468,6 +2471,7 @@ async function initDashboardPage() {
     dashboardRoles = roles;
     selectedAddRoleIds = new Set((data.verification?.addRoleIds || data.verification?.role_ids || []).map(String));
     selectedRemoveRoleIds = new Set((data.verification?.removeRoleIds || data.verification?.remove_role_ids || []).map(String));
+    selectedReviewRoleIds = new Set((data.verification?.reviewRoleIds || data.verification?.review_role_ids || data.verification?.teamRoleIds || data.verification?.team_role_ids || []).map(String));
     selectedAddRoleIds.forEach((id) => selectedRemoveRoleIds.delete(id));
     renderRolePickers();
     $('[data-dashboard-channel-select]').innerHTML = dashboardSelectOptions(channels, [data.verification?.channelId || data.verification?.channel_id].filter(Boolean));
@@ -2934,11 +2938,13 @@ async function initDashboardPage() {
     const formData = new FormData(form);
     const addRoleIds = Array.from(selectedAddRoleIds);
     const removeRoleIds = Array.from(selectedRemoveRoleIds);
+    const reviewRoleIds = Array.from(selectedReviewRoleIds);
     if (!addRoleIds.length) return dashboardNotify('verification', 'Bitte wähle mindestens eine Rolle zum Hinzufügen aus.', 'warn');
     const payload = {
       mode: formData.get('mode'),
       addRoleIds,
       removeRoleIds,
+      reviewRoleIds,
       channelId: formData.get('channelId'),
       logChannelId: formData.get('logChannelId') || null,
       minAccountAgeEnabled: formData.get('minAccountAgeEnabled') === 'on',
