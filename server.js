@@ -51,7 +51,9 @@ const TICKET_UPLOAD_DIR = path.join(DATA_DIR, 'ticket-uploads');
 const TESTER_API_SECRET = process.env.TESTER_API_SECRET || process.env.TESTER_BOT_SECRET || TICKET_API_SECRET || UNBAN_API_SECRET || HEARTBEAT_SECRET || '';
 const TESTER_ACCESS_FILE = path.join(DATA_DIR, 'tester-access-cache.json');
 const TESTER_ACCESS_LOOKUP_FILE = path.join(DATA_DIR, 'tester-access-requests.json');
-const TESTER_REPORTS_FILE = path.join(DATA_DIR, 'tester-reports.json');
+const TESTER_REPORT_REQUESTS_FILE = path.join(DATA_DIR, 'tester-report-requests.json');
+const TESTER_REPORT_HISTORY_FILE = path.join(DATA_DIR, 'tester-report-history-cache.json');
+const TESTER_REPORT_HISTORY_LOOKUP_FILE = path.join(DATA_DIR, 'tester-report-history-requests.json');
 const TESTER_UPLOAD_DIR = path.join(DATA_DIR, 'tester-uploads');
 const TESTER_ACCESS_CACHE_MS = Number(process.env.TESTER_ACCESS_CACHE_MS || (1000 * 60 * 5));
 
@@ -2625,15 +2627,73 @@ function saveTesterAccessRequests(data) {
   saveJson(TESTER_ACCESS_LOOKUP_FILE, data);
 }
 
-function loadTesterReports() {
-  const data = loadJson(TESTER_REPORTS_FILE, { reports: [] });
+function loadTesterReportRequests() {
+  const data = loadJson(TESTER_REPORT_REQUESTS_FILE, { reports: [] });
   if (!Array.isArray(data.reports)) data.reports = [];
   return data;
 }
 
-function saveTesterReports(data) {
+function saveTesterReportRequests(data) {
   if (!Array.isArray(data.reports)) data.reports = [];
-  saveJson(TESTER_REPORTS_FILE, data);
+  saveJson(TESTER_REPORT_REQUESTS_FILE, data);
+}
+
+function loadTesterReportHistory() {
+  const data = loadJson(TESTER_REPORT_HISTORY_FILE, { users: {} });
+  if (!data.users || typeof data.users !== 'object') data.users = {};
+  return data;
+}
+
+function saveTesterReportHistory(data) {
+  if (!data.users || typeof data.users !== 'object') data.users = {};
+  saveJson(TESTER_REPORT_HISTORY_FILE, data);
+}
+
+function loadTesterReportHistoryRequests() {
+  const data = loadJson(TESTER_REPORT_HISTORY_LOOKUP_FILE, { requests: {} });
+  if (!data.requests || typeof data.requests !== 'object') data.requests = {};
+  return data;
+}
+
+function saveTesterReportHistoryRequests(data) {
+  if (!data.requests || typeof data.requests !== 'object') data.requests = {};
+  saveJson(TESTER_REPORT_HISTORY_LOOKUP_FILE, data);
+}
+
+function normalizeTesterReportArray(reports) {
+  return Array.isArray(reports) ? reports.filter((report) => report && typeof report === 'object') : [];
+}
+
+function upsertTesterHistoryReport(userId, report) {
+  if (!userId || !report?.id) return;
+  const history = loadTesterReportHistory();
+  const key = String(userId);
+  const entry = history.users[key] || { userId: key, reports: [], updatedAt: null };
+  entry.reports = normalizeTesterReportArray(entry.reports);
+  const publicReport = publicTesterReport(report);
+  const index = entry.reports.findIndex((item) => item.id === publicReport.id);
+  if (index >= 0) entry.reports[index] = { ...entry.reports[index], ...publicReport };
+  else entry.reports.unshift(publicReport);
+  entry.reports.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  entry.updatedAt = new Date().toISOString();
+  history.users[key] = entry;
+  saveTesterReportHistory(history);
+}
+
+function queueTesterReportHistoryLookup(user) {
+  if (!user?.id) return;
+  const data = loadTesterReportHistoryRequests();
+  data.requests[String(user.id)] = {
+    user,
+    userId: String(user.id),
+    requestedAt: new Date().toISOString(),
+    requestedAtMs: Date.now()
+  };
+  saveTesterReportHistoryRequests(data);
+}
+
+function findTesterReportInRequests(data, reportId) {
+  return data.reports.find((report) => report.id === reportId);
 }
 
 function queueTesterAccessLookup(user) {
@@ -2722,18 +2782,36 @@ function mapTesterImages(req, files) {
   }));
 }
 
-function findTesterReport(data, reportId) {
-  return data.reports.find((report) => report.id === reportId);
+function deleteTesterQueuedImages(report) {
+  const images = Array.isArray(report?.images) ? report.images : [];
+  for (const image of images) {
+    const fileName = path.basename(String(image?.fileName || ''));
+    if (!fileName) continue;
+    const filePath = path.join(TESTER_UPLOAD_DIR, fileName);
+    if (!filePath.startsWith(TESTER_UPLOAD_DIR)) continue;
+    try { fs.unlinkSync(filePath); } catch (_error) {}
+  }
 }
 
 app.get('/api/tester/me', requireUser, (req, res) => {
   const testerAccess = getTesterAccessForUser(req.session.discordUser);
-  const data = loadTesterReports();
-  const reports = data.reports
-    .filter((report) => report.user?.id === req.session.discordUser.id)
-    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+  queueTesterReportHistoryLookup(req.session.discordUser);
+  const history = loadTesterReportHistory();
+  const entry = history.users[String(req.session.discordUser.id)] || { reports: [], updatedAt: null };
+  const reports = normalizeTesterReportArray(entry.reports)
+    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
     .map(publicTesterReport);
-  res.json({ ok: true, user: req.session.discordUser, testerAccess, reports });
+  res.json({
+    ok: true,
+    user: req.session.discordUser,
+    testerAccess,
+    reports,
+    reportHistory: {
+      source: 'bot-hosting-cache',
+      updatedAt: entry.updatedAt || null,
+      checking: true
+    }
+  });
 });
 
 app.post('/api/tester/reports', requireUser, requireTesterUser, testerUpload.array('images', 3), (req, res) => {
@@ -2750,7 +2828,7 @@ app.post('/api/tester/reports', requireUser, requireTesterUser, testerUpload.arr
   const allowedBugTypes = new Set(['Text', 'Code Fehler', 'Design Fehler', 'Funktion Fehler', 'Sonstiges']);
   const normalizedBugType = allowedBugTypes.has(bugType) ? bugType : 'Sonstiges';
 
-  const data = loadTesterReports();
+  const data = loadTesterReportRequests();
   const report = {
     id: `bug_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
     user: req.session.discordUser,
@@ -2761,6 +2839,8 @@ app.post('/api/tester/reports', requireUser, requireTesterUser, testerUpload.arr
     bugType: normalizedBugType,
     images: mapTesterImages(req, req.files),
     status: 'pending',
+    source: 'website-queue',
+    storedBy: 'bot-pending',
     sentToDiscord: false,
     createdAt: new Date().toISOString(),
     handledAt: null,
@@ -2771,7 +2851,8 @@ app.post('/api/tester/reports', requireUser, requireTesterUser, testerUpload.arr
   };
 
   data.reports.push(report);
-  saveTesterReports(data);
+  saveTesterReportRequests(data);
+  upsertTesterHistoryReport(req.session.discordUser.id, report);
   res.json({ ok: true, report: publicTesterReport(report) });
 });
 
@@ -2806,7 +2887,7 @@ app.post('/api/tester/bot/access-status', requireTesterBot, (req, res) => {
 });
 
 app.get('/api/tester/bot/pending-reports', requireTesterBot, (_req, res) => {
-  const data = loadTesterReports();
+  const data = loadTesterReportRequests();
   const reports = data.reports
     .filter((report) => report.status === 'pending' && !report.sentToDiscord)
     .slice(0, 25);
@@ -2815,15 +2896,22 @@ app.get('/api/tester/bot/pending-reports', requireTesterBot, (_req, res) => {
 
 app.post('/api/tester/bot/report-sent', requireTesterBot, (req, res) => {
   const id = String(req.body?.id || '');
-  const data = loadTesterReports();
-  const report = findTesterReport(data, id);
-  if (!report) return res.status(404).json({ ok: false, error: 'Report nicht gefunden.' });
-  report.sentToDiscord = true;
-  report.status = 'in_review';
-  report.discordChannelId = String(req.body.channelId || '');
-  report.discordMessageId = String(req.body.messageId || '');
-  report.sentAt = new Date().toISOString();
-  saveTesterReports(data);
+  const data = loadTesterReportRequests();
+  const report = findTesterReportInRequests(data, id);
+  const update = {
+    ...(report || {}),
+    ...(req.body.report && typeof req.body.report === 'object' ? req.body.report : {}),
+    id,
+    status: 'in_review',
+    sentToDiscord: true,
+    discordChannelId: String(req.body.channelId || report?.discordChannelId || ''),
+    discordMessageId: String(req.body.messageId || report?.discordMessageId || ''),
+    sentAt: new Date().toISOString()
+  };
+  if (report?.user?.id || update?.user?.id) upsertTesterHistoryReport(report?.user?.id || update.user.id, update);
+  if (report) deleteTesterQueuedImages(report);
+  data.reports = data.reports.filter((item) => item.id !== id);
+  saveTesterReportRequests(data);
   res.json({ ok: true });
 });
 
@@ -2831,28 +2919,64 @@ app.post('/api/tester/bot/report-status', requireTesterBot, (req, res) => {
   const id = String(req.body?.id || '');
   const status = String(req.body?.status || '');
   if (!['fixed', 'rejected'].includes(status)) return res.status(400).json({ ok: false, error: 'Ungültiger Status.' });
-  const data = loadTesterReports();
-  const report = findTesterReport(data, id);
-  if (!report) return res.status(404).json({ ok: false, error: 'Report nicht gefunden.' });
+  const userId = String(req.body?.userId || '').replace(/\D/g, '');
+  const history = loadTesterReportHistory();
+  const targetUserId = userId || Object.keys(history.users || {}).find((key) => normalizeTesterReportArray(history.users[key]?.reports).some((report) => report.id === id));
+  if (!targetUserId) return res.status(404).json({ ok: false, error: 'Report-Cache nicht gefunden.' });
+  const entry = history.users[targetUserId] || { userId: targetUserId, reports: [], updatedAt: null };
+  entry.reports = normalizeTesterReportArray(entry.reports);
+  let report = entry.reports.find((item) => item.id === id);
+  if (!report) {
+    report = { id, user: { id: targetUserId }, title: 'Bug Report', createdAt: new Date().toISOString() };
+    entry.reports.unshift(report);
+  }
   report.status = status;
   report.handledAt = new Date().toISOString();
   report.handledBy = req.body.handledBy || null;
   report.decisionReason = sanitizeText(req.body.reason, 1200) || null;
   report.closedChannelId = String(req.body.channelId || report.discordChannelId || '');
-  saveTesterReports(data);
+  entry.updatedAt = new Date().toISOString();
+  history.users[targetUserId] = entry;
+  saveTesterReportHistory(history);
   res.json({ ok: true, report: publicTesterReport(report) });
+});
+
+app.get('/api/tester/bot/report-history-requests', requireTesterBot, (_req, res) => {
+  const data = loadTesterReportHistoryRequests();
+  const now = Date.now();
+  const requests = Object.values(data.requests || {})
+    .filter((item) => item?.userId && now - Number(item.requestedAtMs || Date.parse(item.requestedAt || 0) || 0) < 1000 * 60 * 30)
+    .sort((a, b) => Number(a.requestedAtMs || 0) - Number(b.requestedAtMs || 0))
+    .slice(0, 100);
+  res.json({ ok: true, requests });
+});
+
+app.post('/api/tester/bot/user-reports-cache', requireTesterBot, (req, res) => {
+  const userId = String(req.body?.userId || '').replace(/\D/g, '');
+  if (!userId) return res.status(400).json({ ok: false, error: 'User ID fehlt.' });
+  const history = loadTesterReportHistory();
+  history.users[userId] = {
+    userId,
+    reports: normalizeTesterReportArray(req.body.reports).map(publicTesterReport),
+    updatedAt: new Date().toISOString(),
+    source: 'bot-hosting'
+  };
+  saveTesterReportHistory(history);
+  const requests = loadTesterReportHistoryRequests();
+  delete requests.requests[userId];
+  saveTesterReportHistoryRequests(requests);
+  res.json({ ok: true });
 });
 
 app.get('/api/tester/bot/user-reports/:userId', requireTesterBot, (req, res) => {
   const userId = String(req.params.userId || '').replace(/\D/g, '');
   if (!userId) return res.status(400).json({ ok: false, error: 'User ID fehlt.' });
-  const data = loadTesterReports();
-  const reports = data.reports
-    .filter((report) => String(report.user?.id || '') === userId)
-    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+  const history = loadTesterReportHistory();
+  const reports = normalizeTesterReportArray(history.users[userId]?.reports)
+    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
     .map(publicTesterReport);
   const access = loadTesterAccess().users[userId] || null;
-  res.json({ ok: true, userId, isTester: Boolean(access?.isTester), reports });
+  res.json({ ok: true, userId, isTester: Boolean(access?.isTester), reports, source: 'website-cache' });
 });
 
 
