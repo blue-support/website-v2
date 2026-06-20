@@ -1631,47 +1631,52 @@ async function initDashboardPage() {
     status.className = `chip ${active ? 'online' : ''}`;
   }
 
-  async function waitForTicketPanelResult(actionId, fallbackPanelName) {
+  async function waitForTicketPanelResult(actionId, fallbackPanelName, optimisticPanel = null) {
     if (!actionId || !selectedGuildId) return;
     const guildId = String(selectedGuildId);
-    const maxAttempts = 30;
+    const maxAttempts = 45; // bis zu 90 Sekunden; der Bot pollt Ticket-Aktionen im 4-Sekunden-Takt
 
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      await new Promise((resolve) => window.setTimeout(resolve, 1000));
+      await new Promise((resolve) => window.setTimeout(resolve, 2000));
       if (String(selectedGuildId || '') !== guildId) return;
 
       try {
         const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(guildId)}/ticket/action/${encodeURIComponent(actionId)}`, { cache: 'no-store' });
         const data = await response.json().catch(() => ({}));
         if (!response.ok || !data.ok) {
-          if (response.status === 404 && attempt < 3) continue;
+          if (response.status === 404 && attempt < 5) continue;
           dashboardNotify('ticket', data.error || 'Der Status des Ticket-Panels konnte nicht geladen werden.', 'error');
           return;
         }
 
         if (data.status === 'done') {
           const result = data.result || {};
-          if (Array.isArray(result.panels)) {
-            ticketPanels = normalizeTicketPanels({ panels: result.panels });
-            selectedTicketPanelId = String(result.panelId || selectedTicketPanelId || ticketPanels[0]?.id || createTicketPanelId());
-            renderTicketPanelHistory();
-            updateTicketPanelStatusBadge();
+          const returnedPanels = Array.isArray(result.panels) ? normalizeTicketPanels({ panels: result.panels }) : [];
+          // Der Bot ist maßgeblich. Nur falls die Antwort gerade noch keinen Eintrag enthält,
+          // bleibt der lokale Panel-Verlauf sichtbar statt leer zu werden.
+          if (optimisticPanel && !returnedPanels.some((panel) => String(panel.id) === String(optimisticPanel.id))) {
+            returnedPanels.push(optimisticPanel);
           }
-          const panelName = result.panelName || fallbackPanelName || 'Ticket Support';
+          if (returnedPanels.length) ticketPanels = returnedPanels;
+          selectedTicketPanelId = String(result.panelId || optimisticPanel?.id || selectedTicketPanelId || ticketPanels[ticketPanels.length - 1]?.id || createTicketPanelId());
+          renderTicketPanelHistory();
+          updateTicketPanelStatusBadge();
+          const panelName = result.panelName || fallbackPanelName || optimisticPanel?.name || 'Ticket Support';
           dashboardNotify('ticket', result.message || `Ticket-Panel „${panelName}“ wurde gesendet.`, 'success');
           return;
         }
 
         if (data.status === 'error') {
-          dashboardNotify('ticket', data.result?.error || 'Ticket-Panel konnte nicht gesendet werden.', 'error');
+          dashboardNotify('ticket', data.result?.error || data.error || 'Ticket-Panel konnte nicht gesendet werden.', 'error');
           return;
         }
       } catch (_error) {
-        // Kurz weiter versuchen: Der Bot kann gerade erst sein Ergebnis speichern.
+        // Der Bot kann sein Ergebnis gerade speichern; weiter abfragen.
       }
     }
 
-    dashboardNotify('ticket', 'Ticket-Panel wurde gespeichert. Blue verarbeitet den Versand noch — lade den Ticket-Bereich gleich neu.', 'info');
+    renderTicketPanelHistory();
+    dashboardNotify('ticket', 'Ticket-Panel ist weiter in Bearbeitung. Der Panel-Verlauf bleibt gespeichert; lade die Seite in einer Minute neu, falls keine Rückmeldung erscheint.', 'info');
   }
 
   async function deleteTicketPanel(panelId) {
@@ -1843,7 +1848,7 @@ async function initDashboardPage() {
     ticketCategories = normalizeTicketCategories(config.categories || []);
     ticketPanels = normalizeTicketPanels(config);
     selectedTicketPanelId = config.panelId || config.panel_id || (ticketPanels[0]?.id || createTicketPanelId());
-    const selectedPanel = ticketPanels.find((panel) => String(panel.id) === String(selectedTicketPanelId)) || ticketPanels[0] || null;
+    const selectedPanel = ticketPanels.find((panel) => String(panel.id) === String(selectedTicketPanelId)) || ticketPanels[ticketPanels.length - 1] || null;
     if (selectedPanel) applyTicketPanelToForm(selectedPanel);
     else setTicketPanelEmbedForm(config.panelEmbed || config.panel_embed || null);
     renderTicketPanelHistory();
@@ -2988,11 +2993,26 @@ async function initDashboardPage() {
     if (!response.ok || !result.ok) return dashboardNotify('ticket', result.error || 'Ticket-System konnte nicht gespeichert werden.', result.cooldown ? 'warn' : 'error');
     dashboardMarkSendCooldown(cooldownKey);
     ticketDirty = false;
+    const optimisticPanel = {
+      id: String(payload.panelId),
+      name: payload.panelName || 'Ticket Support',
+      panelChannelId: String(payload.panelChannelId || ''),
+      panelMessageId: null,
+      panelEmbed: payload.panelEmbed || null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
     if (result.config) renderTicketConfig({ ticket: result.config }, dashboardChannels, dashboardCategoryChannels);
-    // Kein Bestätigungsdialog vor dem Senden: nur eine Info während Blue arbeitet
-    // und ein Erfolgs-Popup, sobald der Bot das Panel wirklich gesendet hat.
-    dashboardNotify('ticket', 'Ticket-Panel wird an Blue übergeben …', 'info');
-    void waitForTicketPanelResult(result.actionId, payload.panelName);
+    if (!ticketPanels.some((panel) => String(panel.id) === String(optimisticPanel.id))) {
+      ticketPanels.push(optimisticPanel);
+    }
+    selectedTicketPanelId = optimisticPanel.id;
+    renderTicketPanelHistory();
+    updateTicketPanelStatusBadge();
+    // Kein Bestätigungsdialog vor dem Senden: nur Info während Blue arbeitet
+    // und ein Erfolgs-Popup, sobald der Bot das Panel wirklich in Discord gesendet hat.
+    dashboardNotify('ticket', `Ticket-Panel „${optimisticPanel.name}“ wird an Blue übergeben …`, 'info');
+    void waitForTicketPanelResult(result.actionId, payload.panelName, optimisticPanel);
   });
 
   function resetMessageBuilder() {
