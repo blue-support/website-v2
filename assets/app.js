@@ -1623,6 +1623,57 @@ async function initDashboardPage() {
   }
 
 
+  function updateTicketPanelStatusBadge() {
+    const status = $('[data-dashboard-ticket-status]');
+    if (!status) return;
+    const active = Boolean(ticketPanels.length);
+    status.textContent = active ? `${ticketPanels.length} ${ticketPanels.length === 1 ? 'Panel' : 'Panels'}` : 'Nicht eingerichtet';
+    status.className = `chip ${active ? 'online' : ''}`;
+  }
+
+  async function waitForTicketPanelResult(actionId, fallbackPanelName) {
+    if (!actionId || !selectedGuildId) return;
+    const guildId = String(selectedGuildId);
+    const maxAttempts = 30;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, 1000));
+      if (String(selectedGuildId || '') !== guildId) return;
+
+      try {
+        const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(guildId)}/ticket/action/${encodeURIComponent(actionId)}`, { cache: 'no-store' });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.ok) {
+          if (response.status === 404 && attempt < 3) continue;
+          dashboardNotify('ticket', data.error || 'Der Status des Ticket-Panels konnte nicht geladen werden.', 'error');
+          return;
+        }
+
+        if (data.status === 'done') {
+          const result = data.result || {};
+          if (Array.isArray(result.panels)) {
+            ticketPanels = normalizeTicketPanels({ panels: result.panels });
+            selectedTicketPanelId = String(result.panelId || selectedTicketPanelId || ticketPanels[0]?.id || createTicketPanelId());
+            renderTicketPanelHistory();
+            updateTicketPanelStatusBadge();
+          }
+          const panelName = result.panelName || fallbackPanelName || 'Ticket Support';
+          dashboardNotify('ticket', result.message || `Ticket-Panel „${panelName}“ wurde gesendet.`, 'success');
+          return;
+        }
+
+        if (data.status === 'error') {
+          dashboardNotify('ticket', data.result?.error || 'Ticket-Panel konnte nicht gesendet werden.', 'error');
+          return;
+        }
+      } catch (_error) {
+        // Kurz weiter versuchen: Der Bot kann gerade erst sein Ergebnis speichern.
+      }
+    }
+
+    dashboardNotify('ticket', 'Ticket-Panel wurde gespeichert. Blue verarbeitet den Versand noch — lade den Ticket-Bereich gleich neu.', 'info');
+  }
+
   async function deleteTicketPanel(panelId) {
     if (!selectedGuildId || !panelId) return;
     const panel = ticketPanels.find((item) => String(item.id) === String(panelId));
@@ -2938,7 +2989,10 @@ async function initDashboardPage() {
     dashboardMarkSendCooldown(cooldownKey);
     ticketDirty = false;
     if (result.config) renderTicketConfig({ ticket: result.config }, dashboardChannels, dashboardCategoryChannels);
-    dashboardNotify('ticket', 'Ticket-System gespeichert. Blue sendet/aktualisiert jetzt das Panel.', 'success');
+    // Kein Bestätigungsdialog vor dem Senden: nur eine Info während Blue arbeitet
+    // und ein Erfolgs-Popup, sobald der Bot das Panel wirklich gesendet hat.
+    dashboardNotify('ticket', 'Ticket-Panel wird an Blue übergeben …', 'info');
+    void waitForTicketPanelResult(result.actionId, payload.panelName);
   });
 
   function resetMessageBuilder() {
