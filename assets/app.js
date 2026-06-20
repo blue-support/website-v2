@@ -1257,9 +1257,6 @@ async function initDashboardPage() {
     dashboardTrySendCooldown.map.set(key, Date.now());
   }
 
-  function dashboardConfirmSend(message) {
-    return window.confirm(message || 'Diese Aktion sendet/aktualisiert ein Discord-Embed. Wirklich fortfahren?');
-  }
 
   function setWorkspaceVisible(visible) {
     if (empty) empty.hidden = visible;
@@ -2763,7 +2760,6 @@ async function initDashboardPage() {
     };
     if (!payload.channelId) return dashboardNotify('community', 'Bitte wähle einen Teamlist-Kanal.', 'warn');
     if (!payload.roleIds.length) return dashboardNotify('community', 'Bitte wähle mindestens eine Rolle für die Teamliste.', 'warn');
-    if (!dashboardConfirmSend('Teamliste wirklich an Discord senden/aktualisieren?')) return;
     const cooldownKey = `community:${selectedGuildId}`;
     if (!dashboardTrySendCooldown(cooldownKey, 'community')) return;
     const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/community`, {
@@ -2930,7 +2926,6 @@ async function initDashboardPage() {
       panelEmbed
     };
     if (!payload.panelChannelId || !payload.ticketCategoryId || !payload.logChannelId) return dashboardNotify('ticket', 'Bitte wähle Panel-Kanal, Ticket-Kategorie und Log-Kanal aus.', 'warn');
-    if (!dashboardConfirmSend(`Ticket-Panel "${payload.panelName || 'Ticket Support'}" wirklich an Discord senden/aktualisieren?`)) return;
     const cooldownKey = `ticket:${selectedGuildId}`;
     if (!dashboardTrySendCooldown(cooldownKey, 'ticket')) return;
     const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/ticket`, {
@@ -2961,7 +2956,6 @@ async function initDashboardPage() {
     const payload = currentMessageFromForm();
     if (!payload.name.trim()) return dashboardNotify('messages', 'Bitte gib der Message einen Namen.', 'warn');
     if (!payload.channelId) return dashboardNotify('messages', 'Bitte wähle einen Kanal aus.', 'warn');
-    if (!dashboardConfirmSend(`Message "${payload.name.trim()}" wirklich an Discord senden/aktualisieren?`)) return;
     const cooldownKey = `messages:${selectedGuildId}`;
     if (!dashboardTrySendCooldown(cooldownKey, 'messages')) return;
     const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/messages`, {
@@ -3043,7 +3037,6 @@ async function initDashboardPage() {
         footer: formData.get('footer')
       }
     };
-    if (!dashboardConfirmSend('Verify-Panel wirklich an Discord senden/aktualisieren?')) return;
     const cooldownKey = `verification:${selectedGuildId}`;
     if (!dashboardTrySendCooldown(cooldownKey, 'verification')) return;
     const response = await fetch(`/api/dashboard/guild/${encodeURIComponent(selectedGuildId)}/verification`, {
