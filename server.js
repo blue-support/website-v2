@@ -1195,6 +1195,12 @@ function dashboardPublicModerationConfig(config) {
   };
 }
 
+function dashboardHasPendingTicketAction(guildId) {
+  const target = String(guildId || '');
+  const data = loadDashboardTicketActions();
+  return data.actions.some((action) => String(action?.guildId || '') === target && action?.status === 'pending');
+}
+
 function dashboardPublicTicketConfig(config) {
   if (!config || typeof config !== 'object') return null;
   const panels = Array.isArray(config.panels) ? config.panels.map((panel) => ({
@@ -2399,14 +2405,22 @@ app.post('/api/dashboard/bot/saved-configs', requireDashboardBot, (req, res) => 
     for (const [guildIdRaw, configRaw] of Object.entries(ticketConfigs)) {
       const guildId = String(guildIdRaw || '').replace(/\D/g, '');
       if (!guildId || !configRaw || typeof configRaw !== 'object') continue;
-      data.configs[guildId] = {
-        ...(data.configs[guildId] || {}),
+
+      const existing = data.configs[guildId] || {};
+      // Während eine Aktion noch auf die Bot-Antwort wartet, ist der Website-Stand
+      // neuer als der periodische Bot-Backup-Stand. Panels würden sonst kurz
+      // verschwinden oder gelöschte Panels wieder auftauchen.
+      const preserveLocalPanels = dashboardHasPendingTicketAction(guildId);
+      const merged = {
+        ...existing,
         ...configRaw,
         guildId,
         restoredFromBot: true,
-        status: configRaw.status || data.configs[guildId]?.status || 'done',
-        updatedAt: configRaw.updatedAt || data.configs[guildId]?.updatedAt || new Date().toISOString()
+        status: preserveLocalPanels ? (existing.status || 'pending_apply') : (configRaw.status || existing.status || 'done'),
+        updatedAt: configRaw.updatedAt || existing.updatedAt || new Date().toISOString()
       };
+      if (preserveLocalPanels && Array.isArray(existing.panels)) merged.panels = existing.panels;
+      data.configs[guildId] = merged;
       ticketCount += 1;
     }
     saveDashboardTicketConfigs(data);
