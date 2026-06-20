@@ -1714,17 +1714,43 @@ app.post('/api/dashboard/guild/:guildId/ticket', requireUser, (req, res) => {
   saveDashboardTicketConfigs(configs);
 
   const actions = loadDashboardTicketActions();
-  actions.actions.push({
+  const action = {
     id: `ticket_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
     type: 'apply_ticket_setup',
     guildId,
     config,
     status: 'pending',
     createdAt: now
-  });
+  };
+  actions.actions.push(action);
   saveDashboardTicketActions(actions);
 
-  res.json({ ok: true, config: dashboardPublicTicketConfig(config), message: 'Ticket-System wird vom Bot eingerichtet und das Panel wird gesendet/aktualisiert.' });
+  // Die Website kann dieses Ergebnis abfragen und erst dann eine echte
+  // Erfolgsmeldung zeigen, wenn Blue das Panel wirklich in Discord gesendet hat.
+  res.json({
+    ok: true,
+    config: dashboardPublicTicketConfig(config),
+    actionId: action.id,
+    message: 'Ticket-Panel wird von Blue gesendet/aktualisiert.'
+  });
+});
+
+app.get('/api/dashboard/guild/:guildId/ticket/action/:actionId', requireUser, (req, res) => {
+  const guildId = String(req.params.guildId || '').replace(/\D/g, '');
+  const common = dashboardCommonGuild(req, guildId);
+  if (!common) return res.status(403).json({ ok: false, error: 'Nicht verfügbar - Administrator benötigt. Du brauchst Administratorrechte auf diesem Server.' });
+
+  const actionId = String(req.params.actionId || '').trim();
+  const data = loadDashboardTicketActions();
+  const action = data.actions.find((item) => String(item?.id || '') === actionId && String(item?.guildId || '') === guildId);
+  if (!action) return res.status(404).json({ ok: false, error: 'Ticket-Panel-Aktion wurde nicht gefunden.' });
+
+  res.json({
+    ok: true,
+    status: action.status || 'pending',
+    result: action.result && typeof action.result === 'object' ? action.result : null,
+    finishedAt: action.finishedAt || null
+  });
 });
 
 app.post('/api/dashboard/guild/:guildId/messages', requireUser, (req, res) => {
