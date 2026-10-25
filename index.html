@@ -1,228 +1,67 @@
 <!doctype html>
 <html lang="de">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#3b82f6" />
-  <meta name="description" content="Blue ⚡ ist der All-in-One Discord Bot für Community Server: Dashboard-Setup, Globalchat, Moderation, Tickets, Verify, Messages, Fun, Community und Blue Security." />
-  <meta property="og:title" content="Blue ⚡ Discord Bot" />
-  <meta property="og:description" content="Ein Bot. Kein Chaos. Dashboard-Setup, Globalchat, Moderation, Tickets, Verify, Messages und Sicherheit für deinen Discord Server." />
-  <meta property="og:type" content="website" />
-  <title>Blue ⚡ — All-in-One Discord Bot</title>
-  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
-  <style>body{margin:0;background:#030712;color:#f7fbff;font-family:Inter,system-ui,sans-serif}a{color:inherit}</style>
-  <link rel="stylesheet" href="assets/styles.css" />
-</head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Emden Systems · Dashboard</title>
+<style>
+:root{color-scheme:dark;--bg:#050b16;--panel:#0b1628;--line:#1c3150;--blue:#078cff;--cyan:#24d9ff;--muted:#91a7c7}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 50% -10%,#12366a 0,transparent 45%),var(--bg);font-family:Inter,Segoe UI,Arial,sans-serif;color:#f4f8ff;min-height:100vh}
+header{display:flex;align-items:center;justify-content:space-between;padding:20px clamp(18px,5vw,70px);border-bottom:1px solid #19304f;background:#050b16cc;position:sticky;top:0;backdrop-filter:blur(14px);z-index:2}
+.brand{display:flex;align-items:center;gap:12px;font-weight:900;letter-spacing:.08em}.logo{display:grid;place-items:center;width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,#087cff,#24d9ff);color:#03101f;font-size:24px;box-shadow:0 0 25px #078cff55}
+button,.btn,select,input{font:inherit}button,.btn{border:0;border-radius:10px;padding:12px 16px;background:linear-gradient(110deg,#087cff,#08b9f5);color:white;font-weight:800;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:8px}button.secondary{background:#12243d;border:1px solid #2a4264}main{width:min(1120px,92vw);margin:44px auto 70px}
+.hero{padding:32px;border:1px solid #1b3c65;border-radius:24px;background:linear-gradient(115deg,#0c1b32ee,#07101fee);position:relative;overflow:hidden}.hero:after{content:"⚡";position:absolute;right:5%;top:-35px;font-size:190px;color:#168cff12}.eyebrow{color:var(--cyan);font-weight:800;letter-spacing:.18em;font-size:12px}.hero h1{font-size:clamp(34px,6vw,58px);margin:12px 0}.hero p{color:#b6c9e5;max-width:680px;line-height:1.7}
+.panel{margin-top:22px;padding:24px;border:1px solid var(--line);border-radius:18px;background:#091426eF}.topline{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}h2{margin:0 0 7px;font-size:22px}h3{font-size:15px;color:#bcd3f5;margin:25px 0 14px;text-transform:uppercase;letter-spacing:.12em}.muted{color:var(--muted);font-size:14px}.hidden{display:none!important}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.field{display:flex;flex-direction:column;gap:8px}.field label{font-size:13px;color:#b8cbe5;font-weight:700}.field input,.field select{width:100%;background:#050d1b;border:1px solid #28415f;border-radius:10px;padding:12px;color:white;outline:none}.field input:focus,.field select:focus{border-color:var(--cyan);box-shadow:0 0 0 3px #24d9ff18}.field small{color:#8299bb}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}.status{padding:12px;border-radius:10px;margin-top:14px;background:#10243c;color:#bdeeff;display:none}.footer{text-align:center;color:#7691b7;padding:28px;border-top:1px solid #172943;letter-spacing:.12em;font-size:12px}.footer b{color:#28d8ff}
+.login{min-height:62vh;display:grid;place-items:center}.login-card{text-align:center;max-width:620px;padding:38px;border:1px solid #21466f;border-radius:24px;background:#091426eF}.login-card .logo{margin:0 auto 18px;width:66px;height:66px;font-size:34px}.login-card p{color:#a7bddc;line-height:1.7}.note{padding:14px;border-left:3px solid var(--cyan);background:#0b1c32;color:#a9c4e6;line-height:1.6;font-size:13px;margin-top:20px}
+@media(max-width:700px){.grid{grid-template-columns:1fr}.hero,.panel{padding:20px}header{padding:14px 4vw}.hero h1{font-size:36px}}
+</style></head>
 <body>
-  <canvas id="fx-canvas" aria-hidden="true"></canvas>
-  <div class="aurora"></div><div class="noise"></div><div class="orb one"></div><div class="orb two"></div>
-
-  <header class="site-header" data-header>
-    <a class="brand" href="index.html" aria-label="Blue Startseite"><span class="brand-mark">⚡</span><span class="brand-text">Blue</span></a>
-    <button class="nav-toggle" type="button" aria-label="Menü öffnen" aria-expanded="false" data-nav-toggle><span></span><span></span><span></span></button>
-    <nav class="nav" data-nav>
-      <a class="active" href="/index.html">Home</a>
-      <a href="/index.html#features">Features</a>
-      <a href="/dashboard">Dashboard</a>
-      <a href="/updates.html">Updates</a>
-      <a href="/status.html">Bot Status</a>
-      <a href="/ticket.html">Ticket Support</a>
-      <a href="/unban.html">Unban Antrag</a>
-      <a href="/tos.html">TOS</a>
-      <a href="/privacy.html">Privacy</a>
-      <a href="/impressum.html">Impressum</a>
-      <a href="https://discord.com/oauth2/authorize?client_id=1321889022380871681&permissions=8&integration_type=0&scope=bot" target="_blank" rel="noopener">Bot Einladen</a>
-      <a class="nav-cta" href="https://dsc.blue-lol.de" target="_blank" rel="noopener">Support</a>
-    </nav>
-  </header>
-
-  <main>
-    <section class="hero">
-      <div class="wrapper hero-grid">
-        <div class="hero-copy reveal">
-          <p class="eyebrow"><span class="pulse-dot"></span> Blue ⚡ Version 3.5.0</p>
-          <h1>Ein Bot. <span class="text-gradient">Kein Chaos.</span> Alles drin.</h1>
-          <p class="hero-text">Kein Bock auf 20 verschiedene Bots, die nur Chaos bringen? <strong>Blue ⚡</strong> verbindet Globalchat, Moderation, Tickets, Verifizierung, Musik, Spiele, Anonymchat und Security in einem einzigen cleanen System.</p>
-          <div class="hero-actions">
-            <a class="btn btn-primary" href="https://discord.com/oauth2/authorize?client_id=1321889022380871681&permissions=8&scope=bot%20applications.commands" target="_blank" rel="noopener">Bot einladen</a>
-            <a class="btn btn-secondary" href="dashboard.html">Dashboard öffnen</a>
-            <a class="btn btn-ghost" href="status.html">Live Status</a>
-          </div>
-          <div class="trust-row" aria-label="Highlights">
-            <span>🌍 Globalchat</span><span>🛡️ Moderation</span><span>🎫 Tickets</span><span>✅ Verify</span>
-          </div>
-          <div class="bot-proof">
-            <span>Setup über Web-Dashboard</span>
-            <span>Module zentral verwalten</span>
-            <span>Premium-Systeme integriert</span>
-          </div>
-        </div>
-
-        <div class="hero-panel reveal delay-1">
-          <aside class="dashboard-card" data-tilt aria-label="Bot Vorschau">
-            <div class="browser-dots"><span></span><span></span><span></span></div>
-            <div class="bot-top">
-              <div class="bot-avatar">B⚡</div>
-              <div>
-                <h2>Blue ⚡</h2>
-                <p data-status-title>Alle Systeme operational</p>
-              </div>
-              <span class="status-badge online" data-status-badge>Online</span>
-            </div>
-            <div class="stat-grid">
-              <div class="stat-box"><strong data-stat="onlineUsers">—</strong><span>User online</span></div>
-              <div class="stat-box"><strong data-stat="guilds">—</strong><span>Server</span></div>
-              <div class="stat-box"><strong data-stat="latency">—</strong><span>Ping</span></div>
-            </div>
-            <div class="terminal">
-              <div><span class="cmd">Dashboard</span> Module zentral einstellen</div>
-              <div><span class="ok">✓</span> Globalchat per Web konfigurierbar</div>
-              <div><span class="ok">✓</span> Verify, Tickets & Security im Dashboard</div>
-              <div><span class="warn">⚡</span> Blue Security watchlist online</div>
-            </div>
-          </aside>
-          <div class="mini-card"><span>Globalchat aktiv</span><p>Serverübergreifender Chat mit Rang-Anzeige und Reply-DMs.</p></div>
-          <div class="command-preview"><strong>/help</strong><p>Alle öffentlichen Commands direkt im Server.</p></div>
-        </div>
-      </div>
-
-      <div class="wrapper stats-strip reveal delay-2" aria-label="Live Statistiken">
-        <div class="stat-pill"><strong data-stat="onlineUsers">—</strong><span>User online</span></div>
-        <div class="stat-pill"><strong data-stat="guilds">—</strong><span>Server verbunden</span></div>
-        <div class="stat-pill"><strong>8+</strong><span>Dashboard Module</span></div>
-        <div class="stat-pill"><strong data-stat="uptime">—</strong><span>Uptime</span></div>
-      </div>
-    </section>
-
-    <section id="features" class="section">
-      <div class="wrapper">
-        <div class="section-heading reveal">
-          <p class="eyebrow"><span class="dot"></span> Echte Bot-Features</p>
-          <h2>Gebaut nach deinem Bot-Code, nicht ausgedacht.</h2>
-          <p>Die Website zeigt die Systeme, die Blue wirklich kann: Globalchat, Moderation, Tickets, Verify, Messages, Fun, Community und Security — eingerichtet über das Dashboard statt über Setup-Commands.</p>
-        </div>
-        <div class="feature-grid">
-          <article class="feature-card premium-feature reveal"><div class="feature-icon">🌍</div><h3>Globalchat System</h3><p>Serverübergreifende Nachrichten mit Rang-Anzeige, Server-Infos, Reply-Support, DM-Benachrichtigungen und Dashboard-Kanal-Setup.</p></article>
-          <article class="feature-card reveal delay-1"><div class="feature-icon">🛡️</div><h3>Moderation</h3><p>Ban, Unban, Kick, Mute, Unmute, Warn, Unwarn und Logs — Mod-Rollen und Command-Rechte werden im Dashboard eingestellt.</p></article>
-          <article class="feature-card reveal delay-2"><div class="feature-icon">🎫</div><h3>Ticket System</h3><p>Professionelle Ticket-Panels mit editierbarem Embed, Kategorien, Support-Rollen, Claim/Unclaim, Closed-Kategorie und Logs.</p></article>
-          <article class="feature-card reveal"><div class="feature-icon">✅</div><h3>Verify</h3><p>Manuell oder Auto Verify mit Rollen, optionalem Log-Kanal, Account-Age-Prüfung und editierbarem Panel direkt im Dashboard.</p></article>
-          <article class="feature-card reveal delay-1"><div class="feature-icon">💬</div><h3>Messages</h3><p>Erstelle Discord-Embeds im Web mit Preview, speichere Vorlagen und sende sie direkt in ausgewählte Kanäle.</p></article>
-          <article class="feature-card reveal delay-2"><div class="feature-icon">🔐</div><h3>Security</h3><p>Link-/Invite-Blocker, Sprachschutz, ignorierte Rollen/Kanäle und Blue Security Global-Ban-System für größere Communities.</p></article>
-        </div>
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="wrapper">
-        <div class="section-heading reveal">
-          <p class="eyebrow"><span class="dot"></span> Module</p>
-          <h2>Ein Bot ersetzt mehrere einzelne Systeme.</h2>
-        </div>
-        <div class="module-grid">
-          <article class="module-card reveal"><strong>🎮</strong><h3>Fun</h3><p>Counting, Errate-die-Zahl und Anonym-Chat werden im Dashboard per Kanal-Auswahl eingerichtet.</p></article>
-          <article class="module-card reveal delay-1"><strong>🧭</strong><h3>Dashboard</h3><p>Server auswählen, Module öffnen, Einstellungen speichern und Panels direkt senden.</p></article>
-          <article class="module-card reveal delay-2"><strong>👥</strong><h3>Community</h3><p>Teamliste mit Kanal und bis zu 10 Rollen direkt über das Dashboard verwalten.</p></article>
-          <article class="module-card reveal delay-3"><strong>🔐</strong><h3>Blue Security</h3><p>Global-Ban-Reports, Linkschutz, Sprachschutz und Security-Tools für problematische User.</p></article>
-          <article class="module-card reveal"><strong>⚙️</strong><h3>Globale Einstellungen</h3><p>Verify, Globalchat, Ticket, Moderation, Fun, Community, Messages und Security an einem Ort.</p></article>
-          <article class="module-card reveal delay-1"><strong>🚀</strong><h3>Schneller Start</h3><p>Admins öffnen das Dashboard, wählen den Server und konfigurieren Systeme ohne Setup-Commands.</p></article>
-          <article class="module-card reveal delay-2"><strong>⭐</strong><h3>Premium</h3><p>Premium-Systeme sind sauber geprüft und an Server-Owner gebunden.</p></article>
-          <article class="module-card reveal delay-3"><strong>📊</strong><h3>Live Stats</h3><p>Bot-Status zeigt Server, User, Ping, Uptime und Systemkomponenten über Render.</p></article>
-        </div>
-      </div>
-    </section>
-
-    <section id="commands" class="section">
-      <div class="wrapper system-board">
-        <div class="system-panel reveal">
-          <p class="eyebrow"><span class="dot"></span> Dashboard statt Setup-Commands</p>
-          <h3>Die Einrichtung läuft jetzt über die Website.</h3>
-          <p>Alte Setup-Commands wie <strong>/setup-globalchat</strong>, <strong>/setup-ticket-system</strong>, <strong>/setup-verify</strong>, <strong>/setup-mod-team</strong>, <strong>/setup-counting</strong>, <strong>/setup-errate-zahl</strong>, <strong>/setup-anonymchat</strong> und <strong>/setup-teamlist</strong> wurden durch das Dashboard ersetzt.</p>
-          <div class="command-cloud" aria-label="Dashboard Module Übersicht">
-            <span class="command-chip hot">Dashboard → Verify</span>
-            <span class="command-chip hot">Dashboard → Globalchat</span>
-            <span class="command-chip hot">Dashboard → Ticket</span>
-            <span class="command-chip">Dashboard → Messages</span>
-            <span class="command-chip">Dashboard → Moderation</span>
-            <span class="command-chip">Dashboard → Fun</span>
-            <span class="command-chip">Dashboard → Community</span>
-            <span class="command-chip">Dashboard → Security</span>
-          </div>
-        </div>
-        <div class="blue-console reveal delay-1">
-          <div class="console-top"><span></span><span></span><span></span></div>
-          <div class="console-line"><code>Dashboard → Server wählen</code><small>Nur gemeinsame Server mit Admin-Rechten</small></div>
-          <div class="console-line"><code>Dashboard → Module</code><small>Kanäle, Rollen und Embeds einstellen</small></div>
-          <div class="console-line"><code>Dashboard → Speichern</code><small>Bot übernimmt die Konfiguration</small></div>
-          <div class="console-line"><code>Dashboard → Panels senden</code><small>Verify, Tickets und Messages direkt posten</small></div>
-          <div class="console-line"><code>Public Commands</code><small>Moderation und User-Features bleiben nutzbar</small></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="wrapper showcase reveal">
-        <div>
-          <p class="eyebrow"><span class="dot"></span> Setup in Minuten</p>
-          <h2>Von leerem Server zu sauberem Dashboard-System.</h2>
-          <p class="hero-text">Blue nutzt jetzt ein Web-Dashboard für die Einrichtung. Admins loggen sich mit Discord ein, wählen ihren Server und konfigurieren alle Systeme zentral im Browser.</p>
-          <ul class="check-list">
-            <li>Kanäle und Rollen ohne Setup-Commands auswählen.</li>
-            <li>Verify-, Ticket- und Message-Embeds mit Preview bearbeiten.</li>
-            <li>Moderation, Globalchat, Fun, Community und Security modular aktivieren.</li>
-            <li>Settings werden gespeichert und vom Bot zurück zur Website gesynct.</li>
-          </ul>
-        </div>
-        <div class="command-stack">
-          <div class="command-card"><span>Dashboard → Moderation</span><small>Mod-Rollen und Commands</small></div>
-          <div class="command-card"><span>Dashboard → Ticket</span><small>Panel, Kategorien und Rollen</small></div>
-          <div class="command-card"><span>Dashboard → Globalchat</span><small>Kanal verbinden</small></div>
-          <div class="command-card"><span>Dashboard → Verify</span><small>Manuell oder Auto Verify</small></div>
-          <div class="command-card"><span>Dashboard → Security</span><small>Links, Invites und Sprache</small></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="wrapper">
-        <div class="section-heading reveal">
-          <p class="eyebrow"><span class="dot"></span> Security</p>
-          <h2>Mehr Kontrolle für große Communities.</h2>
-        </div>
-        <div class="security-strip">
-          <article class="security-card reveal"><strong>🛡️ Temporäre Strafen</strong><p>Bans und Mutes können mit Dauer gesetzt werden und laufen automatisch aus.</p></article>
-          <article class="security-card reveal delay-1"><strong>🔗 Linkschutz</strong><p>HTTPS-Links und Discord-Invites wie discord.gg können gelöscht werden, mit Rollen-/Kanal-Ausnahmen.</p></article>
-          <article class="security-card reveal delay-2"><strong>🌐 Sprachschutz</strong><p>Server können eine bevorzugte Sprache setzen und andere Sprachen automatisch blockieren.</p></article>
-        </div>
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="wrapper cta reveal">
-        <div>
-          <p class="eyebrow"><span class="dot"></span> Ready?</p>
-          <h2>Gib deinem Server den Bot, der wirklich Ordnung macht.</h2>
-          <p>Globalchat, Tickets, Moderation, Verify, Musik und Security — alles in Blue ⚡.</p>
-        </div>
-        <div class="cta-actions">
-          <a class="btn btn-primary" href="https://discord.com/oauth2/authorize?client_id=1321889022380871681&permissions=8&scope=bot%20applications.commands" target="_blank" rel="noopener">Blue einladen</a>
-          <a class="btn btn-secondary" href="dashboard.html">Dashboard öffnen</a>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <footer class="site-footer">
-    <div class="wrapper footer-grid">
-      <div><a class="brand" href="index.html"><span class="brand-mark">⚡</span><span class="brand-text">Blue</span></a><p>Der All-in-One Discord Bot für Community Server, die professionell wachsen wollen.</p></div>
-      <div class="footer-links"><strong>Website</strong><a href="index.html">Home</a><a href="status.html">Bot Status</a>
-      <a href="ticket.html">Ticket Support</a>
-      <a href="unban.html">Unban Antrag</a><a href="support.html">Support</a></div>
-      <div class="footer-links"><strong>Legal</strong><a href="impressum.html">Impressum</a><a href="tos.html">Terms of Service</a><a href="privacy.html">Privacy</a></div>
-      <div class="footer-links"><strong>Action</strong><a href="https://discord.com/oauth2/authorize?client_id=1321889022380871681&permissions=8&scope=bot%20applications.commands" target="_blank" rel="noopener">Bot einladen</a><a href="https://dsc.blue-lol.de" target="_blank" rel="noopener">Discord öffnen</a></div>
-    </div>
-    <div class="wrapper copyright"><span>© 2026 Alle Rechte vorbehalten</span><span>Blue ⚡ Community Bot</span></div>
-  </footer>
-
-  <script src="assets/app.js"></script>
-</body>
-</html>
+<header><div class="brand"><div class="logo">E</div><div>EMDEN <span style="color:#28d8ff">SYSTEMS</span><div class="muted" style="font-size:10px;letter-spacing:.18em;margin-top:3px">BOT CONTROL CENTER</div></div></div><div id="headerUser" class="hidden"><span id="username" class="muted"></span> <a class="btn" href="/auth/logout" style="margin-left:8px">Abmelden</a></div></header>
+<main>
+<section id="loginView" class="login"><div class="login-card"><div class="logo">E</div><div class="eyebrow">ROLEPLAY MANAGEMENT</div><h1 style="font-size:clamp(32px,5vw,48px);margin:12px 0">Dein Bot. Deine Regeln.</h1><p>Verwalte die Setup-Einstellungen für Welcome-System und RP-System zentral über ein sicheres Dashboard. Anmeldung ausschließlich mit dem autorisierten Discord-Account.</p><a class="btn" href="/auth/login">◉ Mit Discord anmelden</a><div class="note">Zugriff ist auf die konfigurierte Besitzer-ID beschränkt. Die Berechtigung wird serverseitig geprüft.</div></div></section>
+<section id="dashboardView" class="hidden">
+<div class="hero"><div class="eyebrow">CONTROL CENTER / SETTINGS</div><h1>Dashboard<span style="color:#24d9ff">.</span></h1><p>Konfiguriere beide Setup-Systeme, ohne die bestehenden RP-Start-/Stop- und übrigen Bot-Commands zu verändern. Änderungen werden in dieselbe Konfigurationsdatei geschrieben, die der Bot bereits nutzt.</p>
+<div class="field" style="max-width:420px;margin-top:20px"><label for="guildSelect">Discord-Server auswählen</label><select id="guildSelect"><option>Server werden geladen …</option></select></div></div>
+<div class="panel"><div class="topline"><div><h2>Welcome-System</h2><div class="muted">Entspricht /setup-welcome</div></div><span class="eyebrow">01 / WELCOME</span></div>
+<div class="grid" style="margin-top:22px">
+<div class="field"><label>Welcome-Kanal-ID</label><input id="welcome_channel_id" inputmode="numeric" placeholder="z. B. 123456789012345678"></div>
+<div class="field"><label>Abschieds-Kanal-ID</label><input id="leave_channel_id" inputmode="numeric" placeholder="Discord-Kanal-ID"></div>
+<div class="field"><label>Discord-Regelkanal-ID</label><input id="discord_rules_channel_id" inputmode="numeric" placeholder="Discord-Kanal-ID"></div>
+<div class="field"><label>Roleplay-Regelkanal-ID</label><input id="roleplay_rules_channel_id" inputmode="numeric" placeholder="Discord-Kanal-ID"></div>
+<div class="field"><label>Welcome-Banner</label><input id="welcome_banner" type="file" accept="image/*"><small>PNG/JPG/WebP, maximal 8 MB</small></div>
+</div>
+<h3>RP-System</h3><div class="topline"><div><h2>Roleplay Start & Stop</h2><div class="muted">Entspricht /setup-rp-system</div></div><span class="eyebrow">02 / RP STATUS</span></div>
+<div class="grid" style="margin-top:18px">
+<div class="field"><label>RP-Status-Kanal-ID</label><input id="rp_channel_id" inputmode="numeric" placeholder="Discord-Kanal-ID"></div>
+<div class="field"><label>Ingame-Servername</label><input id="server_name" maxlength="100" placeholder="Name des Roleplay-Servers"></div>
+<div class="field"><label>Ingame-Join-Code</label><input id="join_code" maxlength="100" placeholder="Join-Code"></div>
+<div class="field"><label>RP-Regelkanal-ID</label><input id="rp_rules_channel_id" inputmode="numeric" placeholder="Discord-Kanal-ID"></div>
+<div class="field"><label>Ping-Rollen-ID</label><input id="ping_role_id" inputmode="numeric" placeholder="Discord-Rollen-ID"></div>
+<div class="field"><label>RP-Start-Banner</label><input id="rp_start_banner" type="file" accept="image/*"><small>PNG/JPG/WebP, maximal 8 MB</small></div>
+<div class="field"><label>RP-Stop-Banner</label><input id="rp_stop_banner" type="file" accept="image/*"><small>PNG/JPG/WebP, maximal 8 MB</small></div>
+</div>
+<div class="note">Die ID-Felder benötigen Discord-IDs. Aktiviere in Discord unter Einstellungen → Erweitert den Entwicklermodus und wähle „ID kopieren“. Der Bot benötigt Schreibrechte in den Zielkanälen und Zugriff auf die verwendete Rolle.</div>
+<div class="actions"><button id="saveBtn">Einstellungen speichern</button><button class="secondary" id="reloadBtn">Neu laden</button></div><div id="status" class="status"></div>
+</div>
+</section>
+</main><footer class="footer">POWERED BY <b>BLUE ⚡</b></footer>
+<script>
+const $=id=>document.getElementById(id);
+const textFields=['welcome_channel_id','leave_channel_id','discord_rules_channel_id','roleplay_rules_channel_id','rp_channel_id','server_name','join_code','rp_rules_channel_id','ping_role_id'];
+let currentGuild='';
+async function api(url,opts={}){const r=await fetch(url,opts);if(!r.ok){let t=await r.text();throw new Error(t||`HTTP ${r.status}`)}return r.json()}
+function status(msg){$('status').style.display='block';$('status').textContent=msg}
+async function boot(){
+ try{const me=await api('/api/me');if(!me.is_owner)throw new Error('Kein Zugriff');$('loginView').classList.add('hidden');$('dashboardView').classList.remove('hidden');$('headerUser').classList.remove('hidden');$('username').textContent=me.username;
+ const guilds=await api('/api/guilds');$('guildSelect').innerHTML='';if(!guilds.length){$('guildSelect').innerHTML='<option value="">Der Bot ist noch keinem Server beigetreten</option>';return}
+ guilds.forEach(g=>{let o=document.createElement('option');o.value=g.id;o.textContent=g.name;$('guildSelect').appendChild(o)});currentGuild=$('guildSelect').value;await loadSettings();
+ }catch(e){if(!String(e.message).includes('401')&&!String(e.message).includes('anmelden')){$('loginView').classList.remove('hidden');statusSafe(e.message)}}
+}
+function statusSafe(msg){$('status').style.display='block';$('status').textContent=msg}
+async function loadSettings(){currentGuild=$('guildSelect').value;if(!currentGuild)return;const s=await api('/api/settings/'+currentGuild);textFields.forEach(k=>$(k).value=s[k]??'');['welcome_banner','rp_start_banner','rp_stop_banner'].forEach(k=>$(k).value='');status('Einstellungen geladen. Nicht gespeicherte Datei-Auswahlen wurden zurückgesetzt.')}
+$('guildSelect').addEventListener('change',()=>loadSettings().catch(e=>status(e.message)));
+$('reloadBtn').addEventListener('click',()=>loadSettings().catch(e=>status(e.message)));
+$('saveBtn').addEventListener('click',async()=>{
+ try{const f=new FormData();textFields.forEach(k=>f.append(k,$(k).value));['welcome_banner','rp_start_banner','rp_stop_banner'].forEach(k=>{if($(k).files[0])f.append(k,$(k).files[0])});await api('/api/settings/'+currentGuild,{method:'POST',body:f});status('✓ Einstellungen gespeichert. Die bestehenden Bot-Commands bleiben erhalten.');}catch(e){status('Fehler: '+e.message)}
+});
+boot();
+</script></body></html>
