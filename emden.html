@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#070b14" />
+  <meta name="description" content="Emden Systems – das kommende Roleplay-System für Emergency Emden. Beta bald verfügbar." />
+  <title>Emden Systems — Roleplay, neu gedacht.</title>
+  <style>
+    :root{--bg:#070b14;--panel:#0d1423;--panel2:#101b2d;--line:rgba(124,173,255,.16);--blue:#168cff;--cyan:#27d7ff;--text:#f4f8ff;--muted:#91a1ba;--green:#7cf7cb}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow-x:hidden}
+    body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;background:radial-gradient(ellipse at 50% -15%,rgba(22,140,255,.22),transparent 45%),radial-gradient(ellipse at 90% 55%,rgba(39,215,255,.07),transparent 30%),linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px);background-size:auto,auto,44px 44px,44px 44px}
+    a{color:inherit;text-decoration:none}.wrap{width:min(1160px,calc(100% - 40px));margin:auto}.nav{height:82px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.07)}.brand{display:flex;gap:12px;align-items:center;font-weight:850;letter-spacing:-.04em;font-size:19px}.brand-mark{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(145deg,#168cff,#27d7ff);box-shadow:0 0 28px rgba(22,140,255,.28);color:#06101e;font-size:21px}.brand span span{color:var(--cyan)}.navlinks{display:flex;gap:28px;color:#aebbd0;font-size:13px;font-weight:650}.navlinks a:hover{color:white}.nav-cta{padding:11px 16px;border:1px solid rgba(39,215,255,.38);border-radius:10px;background:rgba(22,140,255,.1);font-size:13px;font-weight:750}
+    .hero{padding:94px 0 76px;position:relative;text-align:center}.eyebrow{display:inline-flex;align-items:center;gap:9px;padding:8px 12px;border:1px solid var(--line);border-radius:99px;background:rgba(13,20,35,.8);color:#c6d5ea;font-size:11px;letter-spacing:.15em;text-transform:uppercase;font-weight:800}.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 13px var(--green)}h1{font-size:clamp(48px,8vw,94px);line-height:.98;letter-spacing:-.075em;margin:27px auto 22px;max-width:900px;font-weight:900}h1 .gradient{background:linear-gradient(95deg,#fff 10%,#8bcfff 52%,#28d7ff 85%);-webkit-background-clip:text;background-clip:text;color:transparent}.hero p{max-width:650px;margin:0 auto;color:var(--muted);font-size:clamp(15px,2vw,18px);line-height:1.8}.hero-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:30px}.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:14px 20px;border-radius:12px;font-size:14px;font-weight:800;border:1px solid transparent;transition:.2s}.btn:hover{transform:translateY(-2px)}.primary{color:#04101c;background:linear-gradient(110deg,#168cff,#39ddff);box-shadow:0 10px 36px rgba(22,140,255,.2)}.secondary{border-color:rgba(255,255,255,.13);background:rgba(255,255,255,.035);color:#e7eef9}.hero-note{margin-top:22px;color:#6f819c;font-size:12px}
+    .preview-shell{max-width:950px;margin:56px auto 0;padding:9px;border:1px solid rgba(100,165,255,.25);border-radius:22px;background:linear-gradient(145deg,rgba(39,215,255,.12),rgba(22,140,255,.025) 45%,rgba(255,255,255,.025));box-shadow:0 30px 100px rgba(0,0,0,.4),0 0 80px rgba(22,140,255,.09)}.preview{min-height:300px;border-radius:15px;overflow:hidden;position:relative;background:linear-gradient(115deg,rgba(5,12,24,.8),rgba(5,12,24,.45)),radial-gradient(ellipse at 50% 110%,rgba(0,122,255,.55),transparent 55%),linear-gradient(135deg,#142b4b,#07101f 60%,#0c1b31);display:grid;place-items:center}.preview:before,.preview:after{content:"";position:absolute;border:1px solid rgba(39,215,255,.14);border-radius:50%;width:430px;height:430px}.preview:after{width:580px;height:580px}.preview-content{z-index:1;text-align:center;padding:40px}.orb{margin:0 auto 20px;width:74px;height:74px;border-radius:23px;display:grid;place-items:center;font-size:35px;color:#07101f;background:linear-gradient(145deg,#fff,#28d7ff 58%,#168cff);box-shadow:0 0 55px rgba(39,215,255,.35);transform:rotate(-5deg)}.preview h2{font-size:clamp(24px,4vw,42px);letter-spacing:-.055em;margin:0 0 10px}.preview p{font-size:13px;color:#a9bdd8;margin:0;letter-spacing:.16em;text-transform:uppercase}.preview-label{position:absolute;left:18px;top:18px;color:#a5b8d2;font-size:10px;letter-spacing:.18em;text-transform:uppercase}.preview-status{position:absolute;right:18px;top:18px;border:1px solid rgba(124,247,203,.25);color:var(--green);padding:7px 10px;border-radius:8px;font-size:10px;font-weight:800;letter-spacing:.12em}
+    section{padding:74px 0}.section-head{display:flex;justify-content:space-between;align-items:end;gap:20px;margin-bottom:28px}.kicker{font-size:11px;color:var(--cyan);font-weight:850;letter-spacing:.2em;text-transform:uppercase}.section-head h2{font-size:clamp(29px,4vw,42px);letter-spacing:-.055em;margin:10px 0 0}.section-head p{color:var(--muted);max-width:390px;line-height:1.7;font-size:14px;margin:0}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.feature{padding:24px;border:1px solid var(--line);border-radius:17px;background:linear-gradient(145deg,rgba(16,27,45,.86),rgba(9,15,27,.88));min-height:185px;transition:.2s}.feature:hover{border-color:rgba(39,215,255,.4);transform:translateY(-3px)}.feature-icon{height:42px;width:42px;display:grid;place-items:center;border-radius:12px;color:var(--cyan);background:rgba(22,140,255,.13);font-size:20px;margin-bottom:20px}.feature h3{margin:0 0 9px;font-size:16px}.feature p{margin:0;color:var(--muted);font-size:13px;line-height:1.7}
+    .release-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.release{position:relative;overflow:hidden;padding:28px;border:1px solid var(--line);border-radius:18px;background:var(--panel)}.release:after{content:"";position:absolute;width:170px;height:170px;right:-70px;top:-80px;border-radius:50%;background:rgba(22,140,255,.12);filter:blur(2px)}.release-top{display:flex;justify-content:space-between;align-items:center;gap:12px}.release h3{font-size:19px;margin:0}.pill{white-space:nowrap;font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-weight:850;padding:7px 9px;border-radius:7px;color:#d3deef;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08)}.pill.soon{color:var(--green);background:rgba(124,247,203,.07);border-color:rgba(124,247,203,.2)}.release .date{font-size:28px;font-weight:850;letter-spacing:-.04em;margin:24px 0 8px}.release p{color:var(--muted);font-size:13px;line-height:1.7;margin:0}
+    .leaks{border:1px solid var(--line);border-radius:20px;padding:24px;background:rgba(13,20,35,.7)}.leak-tools{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px}.leak-tools input{flex:1;min-width:220px;padding:13px 14px;color:white;background:#080e19;border:1px solid rgba(255,255,255,.12);border-radius:10px;outline:none}.leak-tools input:focus{border-color:rgba(39,215,255,.6)}.leak-tools button{border:0;border-radius:10px;padding:0 18px;font-weight:800;color:#04101c;background:linear-gradient(110deg,#168cff,#39ddff);cursor:pointer}.leak-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.leak-card{min-width:0;border:1px solid rgba(255,255,255,.09);border-radius:13px;overflow:hidden;background:#080e19}.leak-image{height:150px;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 100%,rgba(22,140,255,.28),transparent 65%),linear-gradient(135deg,#111e32,#080e19);color:#70839f;font-size:12px;overflow:hidden}.leak-image img{width:100%;height:100%;object-fit:cover;display:block}.leak-meta{padding:13px}.leak-meta strong{font-size:13px;display:block}.leak-meta span{font-size:11px;color:#7e90a9;display:block;margin-top:5px;overflow-wrap:anywhere}.leak-empty{color:#8798b1;text-align:center;padding:28px 10px;font-size:13px;grid-column:1/-1}.small-note{font-size:11px;color:#72839c;line-height:1.7;margin:14px 0 0}
+    .cta-panel{border:1px solid rgba(39,215,255,.22);border-radius:22px;padding:46px 28px;text-align:center;background:radial-gradient(ellipse at 50% 0%,rgba(22,140,255,.17),transparent 55%),linear-gradient(145deg,#0e192a,#080e19)}.cta-panel h2{font-size:clamp(28px,4vw,44px);letter-spacing:-.06em;margin:0 0 12px}.cta-panel p{color:var(--muted);max-width:550px;margin:0 auto;line-height:1.7;font-size:14px}.cta-panel .hero-actions{margin-top:23px}
+    footer{border-top:1px solid rgba(255,255,255,.08);padding:25px 0 0}.footer-main{display:flex;justify-content:space-between;align-items:center;gap:20px;padding-bottom:22px}.footer-copy{font-size:12px;color:#72839c}.powered{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:850;letter-spacing:.01em;padding:11px 15px;border:1px solid rgba(39,215,255,.24);border-radius:10px;background:linear-gradient(100deg,rgba(22,140,255,.12),rgba(39,215,255,.06))}.powered b{color:var(--cyan)}.powered .bolt{font-size:18px}.footer-bottom{border-top:1px solid rgba(255,255,255,.06);padding:15px 0;display:flex;justify-content:space-between;gap:12px;color:#52627a;font-size:11px}
+    @media(max-width:760px){.navlinks{display:none}.nav{height:70px}.hero{padding:70px 0 48px}.preview-shell{margin-top:38px}.preview{min-height:250px}.section-head{display:block}.section-head p{margin-top:13px}.grid{grid-template-columns:1fr}.feature{min-height:0}.release-grid{grid-template-columns:1fr}.leak-grid{grid-template-columns:1fr}.leak-image{height:190px}.footer-main,.footer-bottom{align-items:flex-start;flex-direction:column}.powered{font-size:12px}}
+  </style>
+</head>
+<body>
+  <header class="wrap nav">
+    <a class="brand" href="#top" aria-label="Emden Systems Startseite"><span class="brand-mark">E</span><span>EMDEN <span>SYSTEMS</span></span></a>
+    <nav class="navlinks" aria-label="Hauptnavigation"><a href="#features">Features</a><a href="#release">Release</a><a href="#sneak-peeks">Sneak Peeks</a></nav>
+    <a class="nav-cta" href="#release">Projekt entdecken ↗</a>
+  </header>
+
+  <main id="top">
+    <section class="hero wrap">
+      <div class="eyebrow"><span class="dot"></span> IN ENTWICKLUNG · EMERGENCY EMDEN</div>
+      <h1>Roleplay.<br><span class="gradient">Neu gedacht.</span></h1>
+      <p>Ein neues System für die Community von <strong>Emergency Emden</strong>. Entwickelt, um Roleplay einfacher zu organisieren, Abläufe zu verbessern und Moderation übersichtlich zu gestalten.</p>
+      <div class="hero-actions"><a class="btn primary" href="#sneak-peeks">Sneak Peeks ansehen <span>↘</span></a><a class="btn secondary" href="#release">Release-Infos <span>→</span></a></div>
+      <div class="hero-note">Noch nicht veröffentlicht · Weitere Informationen folgen</div>
+      <div class="preview-shell"><div class="preview"><div class="preview-label">EMDEN SYSTEMS / PROJECT OVERVIEW</div><div class="preview-status">● IN ENTWICKLUNG</div><div class="preview-content"><div class="orb">E</div><h2>EMDEN SYSTEMS</h2><p>Das nächste Kapitel deines Roleplays</p></div></div></div>
+    </section>
+
+    <section id="features" class="wrap">
+      <div class="section-head"><div><div class="kicker">Das System</div><h2>Alles im Griff. Mehr Zeit fürs RP.</h2></div><p>Die geplanten Funktionen auf einen Blick. Details und Umfang können sich während der Entwicklung noch ändern.</p></div>
+      <div class="grid">
+        <article class="feature"><div class="feature-icon">▶</div><h3>RP Start & Stop</h3><p>Roleplay-Sessions klar starten und beenden – mit strukturierten Abläufen für eure Community.</p></article>
+        <article class="feature"><div class="feature-icon">✦</div><h3>Welcome System</h3><p>Neue Mitglieder willkommen heißen und ihnen den Einstieg auf dem Server erleichtern.</p></article>
+        <article class="feature"><div class="feature-icon">◈</div><h3>Moderation</h3><p>Hilfreiche Moderationswerkzeuge für ein übersichtliches und angenehmes Miteinander.</p></article>
+        <article class="feature"><div class="feature-icon">☷</div><h3>Klare Struktur</h3><p>Wichtige Informationen und Abläufe dort bündeln, wo sie gebraucht werden.</p></article>
+        <article class="feature"><div class="feature-icon">⚡</div><h3>Für Emergency Emden</h3><p>Mit Fokus auf die Bedürfnisse von Roleplay-Communities rund um das Roblox-Spiel.</p></article>
+        <article class="feature"><div class="feature-icon">＋</div><h3>Mehr in Planung</h3><p>Weitere Ideen und Funktionen sind in Arbeit. Sneak Peeks werden hier ergänzt.</p></article>
+      </div>
+    </section>
+
+    <section id="release" class="wrap">
+      <div class="section-head"><div><div class="kicker">Zeitplan</div><h2>Der Start rückt näher.</h2></div><p>Wir veröffentlichen Neuigkeiten, sobald es verlässliche Informationen gibt.</p></div>
+      <div class="release-grid">
+        <article class="release"><div class="release-top"><h3>Beta Release</h3><span class="pill soon">Bald verfügbar</span></div><div class="date">Bald<span style="color:var(--cyan)">.</span></div><p>Die Beta ist in Vorbereitung. Weitere Infos zum Zugang werden zu einem späteren Zeitpunkt bekannt gegeben.</p></article>
+        <article class="release"><div class="release-top"><h3>Offizieller Release</h3><span class="pill">Termin offen</span></div><div class="date">Unbekannt<span style="color:var(--cyan)">.</span></div><p>Ein festes Veröffentlichungsdatum steht aktuell noch nicht fest. Qualität geht vor einem vorschnellen Start.</p></article>
+      </div>
+    </section>
+
+    <section id="sneak-peeks" class="wrap">
+      <div class="section-head"><div><div class="kicker">Einblicke</div><h2>Sneak Peeks & Leaks</h2></div><p>Erste Einblicke in die Entwicklung. Neue Bilder kannst du später direkt über eine Bild-URL ergänzen.</p></div>
+      <div class="leaks">
+        <form class="leak-tools" id="leakForm"><input id="imageUrl" type="url" placeholder="Bild-URL einfügen (https://…)" aria-label="Bild-URL" required><input id="imageTitle" type="text" placeholder="Titel, z. B. Neues Dashboard" aria-label="Bildtitel" style="flex:0.7;min-width:180px"><button type="submit">+ Peek hinzufügen</button></form>
+        <div class="leak-grid" id="leakGrid"><div class="leak-empty" id="emptyState">Noch keine Sneak Peeks veröffentlicht.<br>Schau später wieder vorbei – hier erscheinen neue Einblicke.</div></div>
+        <p class="small-note">Hinweis: Die hier hinzugefügten Bilder werden nur in dieser geöffneten Browser-Sitzung angezeigt. Für dauerhaft veröffentlichte Sneak Peeks müssen die Bild-URLs in die Website-Datei eingetragen oder an ein Backend angebunden werden.</p>
+      </div>
+    </section>
+
+    <section class="wrap"><div class="cta-panel"><div class="kicker">Demnächst</div><h2>Das ist erst der Anfang.</h2><p>Emden Systems befindet sich in Entwicklung. Bleib gespannt auf neue Funktionen, erste Einblicke und Informationen zum Beta-Start.</p><div class="hero-actions"><a class="btn primary" href="#sneak-peeks">Updates im Blick behalten ↗</a><a class="btn secondary" href="#top">Zurück nach oben ↑</a></div></div></section>
+  </main>
+
+  <footer><div class="wrap"><div class="footer-main"><div><a class="brand" href="#top"><span class="brand-mark">E</span><span>EMDEN <span>SYSTEMS</span></span></a><div class="footer-copy" style="margin-top:10px">Ein Community-Projekt für Emergency Emden.</div></div><div class="powered"><span>Powered by <b>Blue</b></span><span class="bolt">⚡</span></div></div><div class="footer-bottom"><span>© <span id="year"></span> Emden Systems. Alle Rechte vorbehalten.</span><span>Ein unabhängiges Fanprojekt · Nicht offiziell mit Roblox verbunden</span></div></div></footer>
+
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+    const form = document.getElementById('leakForm');
+    const grid = document.getElementById('leakGrid');
+    const empty = document.getElementById('emptyState');
+    form.addEventListener('submit', function(event) {
+      event.preventDefault();
+      const urlInput = document.getElementById('imageUrl');
+      const titleInput = document.getElementById('imageTitle');
+      const url = urlInput.value.trim();
+      const title = titleInput.value.trim() || 'Sneak Peek';
+      try {
+        const parsed = new URL(url);
+        if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Invalid URL');
+      } catch (_) {
+        urlInput.setCustomValidity('Bitte eine gültige https://- oder http://-Bild-URL eingeben.');
+        urlInput.reportValidity();
+        return;
+      }
+      urlInput.setCustomValidity('');
+      if (empty) empty.remove();
+      const card = document.createElement('article');
+      card.className = 'leak-card';
+      const imageWrap = document.createElement('div');
+      imageWrap.className = 'leak-image';
+      const img = document.createElement('img');
+      img.src = url;
+      img.alt = title;
+      img.loading = 'lazy';
+      img.referrerPolicy = 'no-referrer';
+      img.onerror = function() { imageWrap.textContent = 'Bild konnte nicht geladen werden'; };
+      imageWrap.appendChild(img);
+      const meta = document.createElement('div');
+      meta.className = 'leak-meta';
+      const heading = document.createElement('strong');
+      heading.textContent = title;
+      const link = document.createElement('span');
+      link.textContent = url;
+      meta.append(heading, link);
+      card.append(imageWrap, meta);
+      grid.prepend(card);
+      form.reset();
+    });
+    document.getElementById('imageUrl').addEventListener('input', function(){ this.setCustomValidity(''); });
+  </script>
+</body>
+</html>
